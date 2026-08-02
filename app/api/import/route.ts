@@ -1,4 +1,12 @@
-import { isSafePublicUrl, normalizeProductUrl, parseProductHtml } from "../../../lib/product-extractor";
+import {
+  enrichGuProductWithInventory,
+  enrichShopifyProductWithVariants,
+  getGuInventoryUrl,
+  getShopifyProductJsonUrl,
+  isSafePublicUrl,
+  normalizeProductUrl,
+  parseProductHtml,
+} from "../../../lib/product-extractor";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +26,10 @@ export async function POST(request: Request) {
 
     const response = await fetch(normalizedUrl, {
       headers: {
-        "Accept": "text/html,application/xhtml+xml",
-        "User-Agent": "Mozilla/5.0 (compatible; WardrobeIndex/0.1; product-preview)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
       },
       redirect: "follow",
       signal: AbortSignal.timeout(12000),
@@ -45,7 +55,45 @@ export async function POST(request: Request) {
     }
 
     const html = (await response.text()).slice(0, 2_000_000);
-    const product = parseProductHtml(html, response.url || normalizedUrl);
+    const sourceUrl = response.url || normalizedUrl;
+    let product = parseProductHtml(html, sourceUrl);
+    const guInventoryUrl = getGuInventoryUrl(sourceUrl);
+    if (guInventoryUrl) {
+      try {
+        const inventoryResponse = await fetch(guInventoryUrl, {
+          headers: {
+            "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+            "x-fr-clientid": "gu.us.web-spa",
+          },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (inventoryResponse.ok) {
+          product = enrichGuProductWithInventory(product, await inventoryResponse.json(), sourceUrl, html);
+        }
+      } catch {
+        // Keep the product details even if GU's separate inventory service is temporarily unavailable.
+      }
+    }
+    const shopifyProductUrl = getShopifyProductJsonUrl(sourceUrl, html);
+    if (shopifyProductUrl) {
+      try {
+        const shopifyResponse = await fetch(shopifyProductUrl, {
+          headers: {
+            "Accept": "application/json,text/javascript;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+          },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (shopifyResponse.ok) {
+          product = enrichShopifyProductWithVariants(product, await shopifyResponse.json(), sourceUrl);
+        }
+      } catch {
+        // The page import still works when a Shopify storefront blocks its optional variant feed.
+      }
+    }
     const hasUsefulData = product.title !== "Untitled product" || !!product.imageUrl || product.priceCents !== null;
     if (!hasUsefulData) {
       return Response.json(

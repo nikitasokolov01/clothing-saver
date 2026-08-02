@@ -1,38 +1,15 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { headers } from "next/headers";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
-export async function generateMetadata(): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3000";
-  const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.includes("localhost") ? "http" : "https");
-  const metadataBase = new URL(`${protocol}://${host}`);
-  const title = "The List — Save what you want to wear";
-  const description = "Save clothing from any retailer and keep an eye on the size you want.";
-
-  return {
-    metadataBase,
-    title,
-    description,
-    icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
-    openGraph: {
-      title,
-      description,
-      type: "website",
-      images: [{ url: new URL("/og.png", metadataBase).toString(), width: 1536, height: 912, alt: "The List — Things worth coming back to." }],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-      images: [new URL("/og.png", metadataBase).toString()],
-    },
-  };
-}
+export const metadata: Metadata = {
+  title: "My wardrobe",
+  description: "Save clothing from any retailer and remember the size you want.",
+  icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
+};
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

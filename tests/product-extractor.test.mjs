@@ -1,16 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  enrichGuProductWithInventory,
+  enrichShopifyProductWithVariants,
+  getGuInventoryUrl,
+  getShopifyProductJsonUrl,
   isSafePublicUrl,
   normalizeProductUrl,
   parseProductHtml,
   statusForSize,
 } from "../lib/product-extractor.ts";
+import { productFromRow, productToRow } from "../lib/product-storage.ts";
 
 test("normalizes tracking parameters while preserving product options", () => {
   assert.equal(
     normalizeProductUrl("https://shop.example/products/tee?utm_source=instagram&color=blue#details"),
     "https://shop.example/products/tee?color=blue",
+  );
+  assert.equal(
+    normalizeProductUrl("https://shop.example/products/tee?_su_rec=abc&_su_rec_id=123&variant=blue"),
+    "https://shop.example/products/tee?variant=blue",
   );
 });
 
@@ -50,6 +59,51 @@ test("extracts product details and variant availability from JSON-LD", () => {
   assert.equal(statusForSize(result.sizes, "M", "unknown"), "in-stock");
 });
 
+test("builds a reusable color and size matrix from Schema.org ProductGroup variants", () => {
+  const html = `<script type="application/ld+json">{
+    "@context":"https://schema.org",
+    "@type":"ProductGroup",
+    "name":"Studio Cargo Pants",
+    "brand":{"name":"Common Label"},
+    "hasVariant":[
+      {"@type":"Product","productID":"black-s","color":"Black","size":"S","image":"https://image.example/black.jpg","url":"/products/cargo?variant=black-s","offers":{"price":"72","priceCurrency":"USD","availability":"https://schema.org/OutOfStock"}},
+      {"@type":"Product","productID":"black-m","color":"Black","size":"M","image":"https://image.example/black.jpg","url":"/products/cargo?variant=black-m","offers":{"price":"72","priceCurrency":"USD","availability":"https://schema.org/InStock"}},
+      {"@type":"Product","productID":"blue-s","color":{"name":"Slate Blue"},"size":"S","image":"https://image.example/blue.jpg","url":"/products/cargo?variant=blue-s","offers":{"price":"74","priceCurrency":"USD","availability":"https://schema.org/InStock"}},
+      {"@type":"Product","productID":"blue-m","color":{"name":"Slate Blue"},"size":"M","image":"https://image.example/blue.jpg","url":"/products/cargo?variant=blue-m","offers":{"price":"74","priceCurrency":"USD","availability":"https://schema.org/OutOfStock"}}
+    ]
+  }</script>`;
+  const result = parseProductHtml(html, "https://shop.example/products/cargo?variant=blue-m");
+
+  assert.equal(result.selectedColor, "Slate Blue");
+  assert.equal(result.imageUrl, "https://image.example/blue.jpg");
+  assert.equal(result.priceCents, 7400);
+  assert.deepEqual(result.sizes, [
+    { label: "S", status: "in-stock", variantId: "blue-s", url: "https://shop.example/products/cargo?variant=blue-s" },
+    { label: "M", status: "out-of-stock", variantId: "blue-m", url: "https://shop.example/products/cargo?variant=blue-m" },
+  ]);
+  assert.deepEqual(result.colors?.map((color) => color.label), ["Black", "Slate Blue"]);
+});
+
+test("reads WooCommerce color-specific variation stock and images", () => {
+  const variations = [
+    { variation_id: 11, attributes: { attribute_pa_color: "navy", attribute_pa_size: "small" }, is_in_stock: false, display_price: 59, image: { src: "https://image.example/navy.jpg" } },
+    { variation_id: 12, attributes: { attribute_pa_color: "navy", attribute_pa_size: "medium" }, is_in_stock: true, display_price: 59, image: { src: "https://image.example/navy.jpg" } },
+    { variation_id: 13, attributes: { attribute_pa_color: "stone", attribute_pa_size: "small" }, is_in_stock: true, display_price: 59, image: { src: "https://image.example/stone.jpg" } },
+  ];
+  const encoded = JSON.stringify(variations).replaceAll('"', "&quot;");
+  const html = `<meta property="og:title" content="Relaxed Trousers"><form class="variations_form" data-product_variations='${encoded}'></form>`;
+  const result = parseProductHtml(html, "https://store.example/product/trousers?variation_id=12&attribute_pa_color=navy&attribute_pa_size=medium");
+
+  assert.equal(result.selectedColor, "Navy");
+  assert.equal(result.imageUrl, "https://image.example/navy.jpg");
+  assert.equal(result.priceCents, 5900);
+  assert.deepEqual(result.sizes, [
+    { label: "Small", status: "out-of-stock", variantId: "11", url: "https://store.example/product/trousers?attribute_pa_color=navy&attribute_pa_size=small&variation_id=11" },
+    { label: "Medium", status: "in-stock", variantId: "12", url: "https://store.example/product/trousers?attribute_pa_color=navy&attribute_pa_size=medium&variation_id=12" },
+  ]);
+  assert.deepEqual(result.colors?.map((color) => color.label), ["Navy", "Stone"]);
+});
+
 test("falls back to open graph product data", () => {
   const html = `<meta property="og:title" content="Everyday Loafer">
     <meta property="og:image" content="https://cdn.example.com/shoe.jpg">
@@ -60,4 +114,198 @@ test("falls back to open graph product data", () => {
   assert.equal(result.priceCents, 12000);
   assert.equal(result.category, "Shoes");
   assert.equal(result.status, "unknown");
+});
+
+test("reads enabled and disabled size controls when structured variants are missing", () => {
+  const html = `
+    <meta property="og:title" content="Dragon T-Shirt">
+    <script type="application/ld+json">{
+      "@type":"Product",
+      "name":"Dragon T-Shirt",
+      "offers":{"price":"0","priceCurrency":"USD"}
+    }</script>
+    <script type="application/json">{"price":5400,"price_min":5400,"available":true}</script>
+    <input class="product-radios__input" type="radio" disabled name="Size" value="XS">
+    <input class="product-radios__input" type="radio" name="Size" value="S" checked>
+    <input class="product-radios__input" type="radio" name="Size" value="M">
+    <input class="product-radios__input" type="radio" disabled name="Size" value="3XL">
+  `;
+  const result = parseProductHtml(html, "https://example.com/products/dragon-shirt");
+  assert.equal(result.priceCents, 5400);
+  assert.deepEqual(result.sizes, [
+    { label: "XS", status: "out-of-stock" },
+    { label: "S", status: "in-stock" },
+    { label: "M", status: "in-stock" },
+    { label: "3XL", status: "out-of-stock" },
+  ]);
+});
+
+test("extracts GU product data and enriches its live size inventory", () => {
+  const state = {
+    pdp: { product: "E359786-000-00" },
+    entity: {
+      pdpEntity: {
+        "E359786-000-00": {
+          product: {
+            name: "Wide Straight Slacks",
+            breadcrumbs: { class: { name: "pants", locale: "Pants" } },
+            colors: [
+              { displayCode: "06", name: "GRAY" },
+              { displayCode: "09", name: "BLACK" },
+            ],
+            images: {
+              main: {
+                "06": { image: "https://image.example/gray.jpg" },
+                "09": { image: "https://image.example/black.jpg" },
+              },
+            },
+            prices: { promo: { value: 24.9, currency: { code: "USD" } } },
+            sizes: [
+              { name: "XS", displayCode: "002" },
+              { name: "S", displayCode: "003" },
+              { name: "M", displayCode: "004" },
+            ],
+          },
+        },
+      },
+    },
+  };
+  const html = `<meta property="og:title" content="Unisex Wide Straight Slacks | GU US">
+    <script>window.__PRELOADED_STATE__ = ${JSON.stringify(state)};</script>`;
+  const sourceUrl = "https://www.gu-global.com/us/en/products/E359786-000/00?colorDisplayCode=06&sizeDisplayCode=004";
+  const parsed = parseProductHtml(html, sourceUrl);
+  const result = enrichGuProductWithInventory(parsed, {
+    result: {
+      l2s: [
+        { color: { displayCode: "06" }, size: { displayCode: "002" }, l2Id: "1" },
+        { color: { displayCode: "06" }, size: { displayCode: "003" }, l2Id: "2" },
+        { color: { displayCode: "06" }, size: { displayCode: "004" }, l2Id: "3" },
+        { color: { displayCode: "09" }, size: { displayCode: "004" }, l2Id: "4" },
+      ],
+      stocks: {
+        1: { statusCode: "LOW_STOCK", quantity: 1, disableSizeChip: false },
+        2: { statusCode: "IN_STOCK", quantity: 11, disableSizeChip: false },
+        3: { statusCode: "STOCK_OUT", quantity: 0, disableSizeChip: true },
+        4: { statusCode: "IN_STOCK", quantity: 8, disableSizeChip: false },
+      },
+    },
+  }, sourceUrl, html);
+  assert.equal(result.priceCents, 2490);
+  assert.equal(result.currency, "USD");
+  assert.equal(result.category, "Bottoms");
+  assert.equal(result.selectedColor, "GRAY");
+  assert.equal(result.imageUrl, "https://image.example/gray.jpg");
+  assert.deepEqual(result.sizes, [
+    {
+      label: "XS",
+      status: "in-stock",
+      variantId: "1",
+      url: "https://www.gu-global.com/us/en/products/E359786-000/00?colorDisplayCode=06&sizeDisplayCode=002",
+    },
+    {
+      label: "S",
+      status: "in-stock",
+      variantId: "2",
+      url: "https://www.gu-global.com/us/en/products/E359786-000/00?colorDisplayCode=06&sizeDisplayCode=003",
+    },
+    {
+      label: "M",
+      status: "out-of-stock",
+      variantId: "3",
+      url: "https://www.gu-global.com/us/en/products/E359786-000/00?colorDisplayCode=06&sizeDisplayCode=004",
+    },
+  ]);
+  assert.deepEqual(result.colors?.map((color) => ({
+    label: color.label,
+    imageUrl: color.imageUrl,
+    statuses: color.sizes.map((size) => `${size.label}:${size.status}`),
+  })), [
+    {
+      label: "GRAY",
+      imageUrl: "https://image.example/gray.jpg",
+      statuses: ["XS:in-stock", "S:in-stock", "M:out-of-stock"],
+    },
+    {
+      label: "BLACK",
+      imageUrl: "https://image.example/black.jpg",
+      statuses: ["XS:unknown", "S:unknown", "M:in-stock"],
+    },
+  ]);
+  assert.equal(
+    result.colors?.[1].sizes[2].url,
+    "https://www.gu-global.com/us/en/products/E359786-000/00?colorDisplayCode=09&sizeDisplayCode=004",
+  );
+  assert.equal(
+    getGuInventoryUrl(sourceUrl),
+    "https://www.gu-global.com/us/api/commerce/v5/en/products/E359786-000/price-groups/00/l2s?withPrices=true&withStocks=true&includePreviousPrice=true&httpFailure=true",
+  );
+});
+
+test("uses a Shopify variant link for the selected color, image, and per-color sizes", () => {
+  const sourceUrl = "https://www.youngla.com/products/2093?variant=45456468148412";
+  const html = `<meta property="og:title" content="2093 - Patchwork Sweats"><script>Shopify.theme = { name: "Camouflage" };</script>`;
+  const parsed = parseProductHtml(html, sourceUrl);
+  const result = enrichShopifyProductWithVariants(parsed, {
+    title: "2093 - Patchwork Sweats",
+    vendor: "YoungLA",
+    type: "Pants",
+    options: [
+      { name: "Color", position: 1, values: ["Black Wash", "Heather Grey"] },
+      { name: "Size", position: 2, values: ["Small", "Medium"] },
+    ],
+    variants: [
+      { id: 1, option1: "Black Wash", option2: "Small", available: false, price: 6400, featured_image: { src: "https://image.example/black.jpg" } },
+      { id: 2, option1: "Black Wash", option2: "Medium", available: true, price: 6400, featured_image: { src: "https://image.example/black.jpg" } },
+      { id: 45456468148412, option1: "Heather Grey", option2: "Small", available: true, price: 6400, featured_image: { src: "https://image.example/grey.jpg" } },
+      { id: 4, option1: "Heather Grey", option2: "Medium", available: false, price: 6400, featured_image: { src: "https://image.example/grey.jpg" } },
+    ],
+  }, sourceUrl);
+
+  assert.equal(getShopifyProductJsonUrl(sourceUrl, html), "https://www.youngla.com/products/2093.js");
+  assert.equal(result.selectedColor, "Heather Grey");
+  assert.equal(result.imageUrl, "https://image.example/grey.jpg");
+  assert.equal(result.priceCents, 6400);
+  assert.equal(result.category, "Bottoms");
+  assert.deepEqual(result.sizes, [
+    { label: "Small", status: "in-stock", variantId: "45456468148412" },
+    { label: "Medium", status: "out-of-stock", variantId: "4" },
+  ]);
+  assert.deepEqual(result.colors?.map((color) => ({ label: color.label, imageUrl: color.imageUrl })), [
+    { label: "Black Wash", imageUrl: "https://image.example/black.jpg" },
+    { label: "Heather Grey", imageUrl: "https://image.example/grey.jpg" },
+  ]);
+});
+
+test("round trips an account product between the app and Supabase row shape", () => {
+  const row = {
+    id: "2a0328db-6090-42b5-98ee-ad52f14a8f91",
+    user_id: "97019b8f-7043-483f-b564-1f0238f6103a",
+    url: "https://shop.example/products/tee?variant=small",
+    canonical_url: "https://shop.example/products/tee",
+    title: "Everyday tee",
+    brand: "Common Label",
+    retailer: "Common Label",
+    image_url: "https://image.example/tee.jpg",
+    price_cents: 4200,
+    currency: "USD",
+    category: "Tops",
+    selected_size: "S",
+    selected_color: "Black",
+    stock_status: "in-stock",
+    sizes: [{ label: "S", status: "in-stock" }],
+    colors: null,
+    collection: "closet",
+    purchased_at: "2026-08-02T22:00:00.000Z",
+    checked_at: "2026-08-02T21:00:00.000Z",
+    created_at: "2026-08-01T21:00:00.000Z",
+    updated_at: "2026-08-02T22:00:00.000Z",
+  };
+  const product = productFromRow(row);
+  assert.equal(product.collection, "closet");
+  assert.equal(product.purchasedAt, "2026-08-02T22:00:00.000Z");
+  const encoded = productToRow(product, row.user_id);
+  assert.equal(encoded.user_id, row.user_id);
+  assert.equal(encoded.canonical_url, row.canonical_url);
+  assert.equal(encoded.collection, "closet");
+  assert.deepEqual(encoded.sizes, row.sizes);
 });

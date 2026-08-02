@@ -1,8 +1,19 @@
 export type StockStatus = "in-stock" | "out-of-stock" | "unknown";
+export type ProductCollection = "saved" | "closet";
 
 export type SizeOption = {
   label: string;
   status: StockStatus;
+  variantId?: string;
+  url?: string;
+};
+
+export type ColorOption = {
+  label: string;
+  imageUrl: string;
+  sizes: SizeOption[];
+  variantId?: string;
+  url?: string;
 };
 
 export type ProductDraft = {
@@ -19,10 +30,13 @@ export type ProductDraft = {
   selectedColor: string;
   status: StockStatus;
   sizes: SizeOption[];
+  colors?: ColorOption[];
 };
 
 export type SavedProduct = ProductDraft & {
   id: string;
+  collection: ProductCollection;
+  purchasedAt: string | null;
   checkedAt: string;
   createdAt: string;
 };

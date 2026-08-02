@@ -1,100 +1,51 @@
-# vinext-starter
+# Clothing Saver MVP
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+A wardrobe shortlist and personal closet. Paste a clothing product link to import its image, price, colors, sizes, and availability, then keep it on your account until you buy it.
 
-## Prerequisites
+## Run locally
 
-- Node.js `>=22.13.0`
-
-## Quick Start
+Requires Node.js 22.13 or newer.
 
 ```bash
 npm install
 npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+Without Supabase environment variables, the app runs in local preview mode and stores data in the browser.
+
+## Supabase accounts
+
+1. Create a Supabase project.
+2. Copy `.env.example` to `.env.local` and add the project URL and publishable key from the Supabase Connect dialog.
+3. Run the SQL in `supabase/migrations/20260802230902_account_closet.sql` from the project's SQL Editor.
+4. Restart `npm run dev`.
+
+The migration creates account-owned `products` and `profiles` tables. Row Level Security is enabled on both, and every operation checks that `auth.uid()` owns the row. Never put a Supabase secret or service-role key in a `NEXT_PUBLIC_` environment variable.
+
+## Current MVP
+
+- Imports product metadata from public retailer pages
+- Lets you review and correct imported details
+- Supports email/password sign-up, login, session refresh, and logout with Supabase
+- Saves products and size preferences per account when Supabase is configured
+- Falls back to browser storage for local UI development
+- Filters items by clothing category
+- Tracks a requested size and its current stock state
+- Stores a size profile and matches acceptable sizes by clothing category
+- Moves purchased items from Saved pieces into a separate Closet inventory
+- Rechecks a saved product through the import endpoint
+- Opens the original retailer page when a product capsule is clicked
+
+Some retailer sites block automated page requests or publish incomplete product data. In those cases the review screen supports manual entry.
+
+## Checks
+
+```bash
+npm test
+npm run lint
 npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
-
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+Deployment can move from localhost to Vercel after the Supabase project variables are added to the Vercel project.
