@@ -862,6 +862,8 @@ export function WardrobeApp() {
           <span>Saved</span>
         </a>
         <div className="topbar-actions">
+          {user && <a className="profile-button social-shortcut" href="/feed">Feed</a>}
+          {user && <a className="profile-button social-shortcut" href="/notifications">Inbox</a>}
           <button className="profile-button" type="button" onClick={openSizeProfile}>My sizes</button>
           {supabase ? (
             <button className="account-button" type="button" onClick={() => setAuthOpen(true)}>
@@ -1011,6 +1013,7 @@ export function WardrobeApp() {
                   <small>Retailer prices stay saved in their original currency.</small>
                 </label>
                 <div className="account-actions">
+                  {accountProfile?.username && <a className="secondary-button" href={`/u/${accountProfile.username}`}>View & share profile</a>}
                   <button className="secondary-button" type="button" onClick={openAccountProfile}>Edit profile</button>
                   <button className="secondary-button" type="button" onClick={signOut}>Log out</button>
                 </div>

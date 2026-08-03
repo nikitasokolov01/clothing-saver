@@ -19,7 +19,7 @@ Without Supabase environment variables, the app runs in local preview mode and s
 
 1. Create a Supabase project.
 2. Copy `.env.example` to `.env.local` and add the project URL and publishable key from the Supabase Connect dialog.
-3. Run the SQL in `supabase/migrations/20260802230902_account_closet.sql` from the project's SQL Editor.
+3. Apply the SQL files in `supabase/migrations` in timestamp order from the project's SQL Editor or your normal Supabase migration workflow.
 4. Restart `npm run dev`.
 
 The migration creates account-owned `products` and `profiles` tables. Row Level Security is enabled on both, and every operation checks that `auth.uid()` owns the row. Never put a Supabase secret or service-role key in a `NEXT_PUBLIC_` environment variable.
@@ -36,6 +36,10 @@ The migration creates account-owned `products` and `profiles` tables. Row Level 
 - Tracks a requested size and its current stock state
 - Stores a size profile and matches acceptable sizes by clothing category
 - Moves purchased items from Saved pieces into a separate Closet inventory
+- Creates shareable profile links at `/u/username`
+- Supports public or private profiles with follow requests
+- Includes follow-request notifications and a feed of shared pieces
+- Lets each profile share Saved, Closet, both, or neither
 - Rechecks a saved product through the import endpoint
 - Opens the original retailer page when a product capsule is clicked
 
