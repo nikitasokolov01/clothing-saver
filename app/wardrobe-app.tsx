@@ -934,7 +934,7 @@ export function WardrobeApp() {
               const availability = availabilityForProduct(product, sizeProfile);
               const price = productPrice(product, preferredCurrency, exchangeRates, exchangeRateTarget);
               return (
-              <article className={`product-pill tone-${index % 4} ${product.category === "Shoes" ? "shoe-pill" : ""}`} key={product.id} style={{ "--delay": `${index * 55}ms` } as CSSProperties}>
+              <article className={`product-pill tone-${index % 4}`} key={product.id} style={{ "--delay": `${index * 55}ms` } as CSSProperties}>
                 <a className="pill-hit-area" href={product.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${product.title} at ${product.retailer} in a new tab`} />
                 <div className="product-photo"><ProductImage product={product} /></div>
                 <div className="product-copy">
@@ -1143,7 +1143,7 @@ export function WardrobeApp() {
                 )}
 
                 <div className="review-layout">
-                  <div className={`preview-image ${draft.category === "Shoes" ? "shoe-preview" : ""}`}>{draft.imageUrl ? <Image loader={sourceImageLoader} src={draft.imageUrl} alt="Product preview" fill sizes="220px" unoptimized /> : <span>Product image</span>}</div>
+                  <div className="preview-image">{draft.imageUrl ? <Image loader={sourceImageLoader} src={draft.imageUrl} alt="Product preview" fill sizes="220px" unoptimized /> : <span>Product image</span>}</div>
                   <div className="form-fields">
                     <label>Product link<input type="url" value={draft.url} onChange={(event) => setDraft({ ...draft, url: event.target.value, canonicalUrl: event.target.value })} placeholder="https://…" required /></label>
                     <label>Product name<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} required /></label>

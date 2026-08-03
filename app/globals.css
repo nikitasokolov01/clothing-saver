@@ -83,10 +83,7 @@ img { display: block; width: 100%; }
 .pill-hit-area { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
 .pill-hit-area:focus-visible { outline: 3px solid #4665d5; outline-offset: -4px; }
 .product-photo { min-height: 226px; border-radius: 24px; overflow: hidden; background: #d6d3cb; position: relative; }
-.product-photo img { height: 100%; object-fit: cover; transition: transform .45s; }
-.product-pill.shoe-pill { grid-template-columns: minmax(180px, 52%) 1fr; }
-.shoe-pill .product-photo { min-height: 0; aspect-ratio: 3 / 2; align-self: center; background: #efede7; }
-.shoe-pill .product-photo img { object-fit: contain; }
+.product-photo img { height: 100%; object-fit: contain; transition: transform .45s; }
 .product-pill:hover .product-photo img { transform: scale(1.025); }
 .product-placeholder { height: 100%; display: grid; place-items: center; align-content: center; gap: 9px; color: var(--muted); background: linear-gradient(145deg, rgba(255,255,255,.3), rgba(0,0,0,.03)); }
 .product-placeholder span { font: italic 50px Georgia, serif; }
@@ -142,9 +139,7 @@ footer { min-height: 90px; display: flex; align-items: center; justify-content: 
 .dialog-header > p:last-child, .importing-state > p:last-child { margin: 0; color: var(--muted); font-size: 12px; }
 .review-layout { display: grid; grid-template-columns: 220px 1fr; gap: 24px; align-items: start; }
 .preview-image { height: 260px; min-height: 0; align-self: start; display: grid; place-items: center; border-radius: 23px; overflow: hidden; background: #eeece5; color: var(--muted); font-size: 11px; position: relative; }
-.preview-image img { height: 100%; object-fit: cover; }
-.preview-image.shoe-preview { height: auto; aspect-ratio: 3 / 2; }
-.preview-image.shoe-preview img { object-fit: contain; }
+.preview-image img { height: 100%; object-fit: contain; }
 .form-fields { display: grid; gap: 13px; }
 .form-fields label, .variant-section > label, .field-row label { display: grid; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 620; }
 .form-fields input, .form-fields select, .variant-section input, .variant-section select { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 12px; outline: 0; background: #fff; padding: 11px 12px; color: var(--ink); font-size: 12px; }
@@ -272,9 +267,7 @@ footer { min-height: 90px; display: flex; align-items: center; justify-content: 
   .section-heading { align-items: center; }
   .search-pill { width: 116px; }
   .product-pill { min-height: 205px; grid-template-columns: 128px 1fr; gap: 14px; padding: 9px; border-radius: 26px; }
-  .product-pill.shoe-pill { grid-template-columns: minmax(150px, 52%) 1fr; }
   .product-photo { min-height: 187px; border-radius: 20px; }
-  .shoe-pill .product-photo { min-height: 0; }
   .product-copy { padding: 12px 6px 7px 0; }
   .product-copy h3 { margin-top: 18px; font-size: 19px; }
   .product-topline span:last-child { display: none; }
