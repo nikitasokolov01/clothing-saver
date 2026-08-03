@@ -30,3 +30,12 @@ test("does not auto-select an explicitly mismatched sizing system", () => {
 
   assert.equal(selected, undefined);
 });
+
+test("matches a preferred half size inside the correct gendered retail range", () => {
+  const selected = preferredSizeForProduct(product([
+    { label: "Women's US 6-6.5", status: "in-stock" },
+    { label: "Men's US 6-6.5", status: "in-stock" },
+  ], "Shoes"), { Shoes: ["US 6.5"] }, "mens");
+
+  assert.equal(selected?.label, "Men's US 6-6.5");
+});

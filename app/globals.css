@@ -158,6 +158,8 @@ footer { min-height: 90px; display: flex; align-items: center; justify-content: 
 .color-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .color-options button { width: 100%; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 999px; background: #fff; padding: 4px 12px 4px 4px; color: var(--ink); font-size: 10px; cursor: pointer; }
 .color-options button.selected { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.color-options button:disabled { cursor: wait; opacity: .58; }
+.color-options button.selected:disabled { opacity: 1; }
 .color-thumb { width: 36px; height: 36px; flex: 0 0 36px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: #eeece5; position: relative; }
 .color-thumb img { object-fit: cover; }
 .size-options { display: flex; flex-wrap: wrap; gap: 8px; }

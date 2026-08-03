@@ -709,6 +709,112 @@ export function getShopifyProductJsonUrl(sourceUrl: string, html: string) {
   return new URL(`${match[1]}.js`, parsedUrl.origin).toString();
 }
 
+export function getBirkenstockVariationUrl(sourceUrl: string, html: string) {
+  let host = "";
+  try {
+    host = new URL(sourceUrl).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  if (!host.endsWith("birkenstock.com")) return null;
+  const selectedButton = html.match(/<button(?=[^>]*class=["'][^"']*m-attribute_color[^"']*["'])(?=[^>]*(?:aria-checked|data-attr-is-selected)=["']true["'])[^>]*data-attr-url=["']([^"']+)["'][^>]*>/i);
+  const fallback = html.match(/data-attr-url=["']([^"']*Product-Variation[^"']*)["']/i);
+  return absoluteUrl(decodeHtml(selectedButton?.[1] || fallback?.[1] || ""), sourceUrl) || null;
+}
+
+function birkenstockImage(value: JsonRecord, dimension = 160) {
+  const images = asRecord(value.images);
+  const candidates = ["large", "medium", "small", "hi-res", "zoom"];
+  for (const key of candidates) {
+    const image = asRecords(images[key])[0];
+    const raw = textValue(image?.absURL ?? image?.url);
+    if (!raw) continue;
+    try {
+      const url = new URL(raw);
+      url.searchParams.set("sw", String(dimension));
+      url.searchParams.set("sh", String(dimension));
+      return url.toString();
+    } catch {
+      return raw;
+    }
+  }
+  return "";
+}
+
+function birkenstockSizes(values: JsonRecord[], pageUrl: string): SizeOption[] {
+  const sizes: SizeOption[] = [];
+  for (const value of values) {
+    let display: JsonRecord = {};
+    try {
+      display = JSON.parse(textValue(value.displayValue)) as JsonRecord;
+    } catch {
+      // Some non-footwear products use a plain size label.
+    }
+    const status: StockStatus = value.selectable === true ? "in-stock" : value.selectable === false ? "out-of-stock" : "unknown";
+    const variantId = textValue(value.id ?? value.value);
+    const addSize = (gender: "Women's" | "Men's", raw: unknown) => {
+      const [, usSize] = textValue(raw).split(";");
+      if (!usSize) return;
+      sizes.push({
+        label: `${gender} US ${usSize}`,
+        status,
+        ...(variantId ? { variantId: `${variantId}-${gender === "Women's" ? "w" : "m"}` } : {}),
+        ...(pageUrl ? { url: pageUrl } : {}),
+      });
+    };
+    addSize("Women's", display.wsize);
+    addSize("Men's", display.msize);
+    if (!textValue(display.wsize) && !textValue(display.msize)) {
+      const label = textValue(value.displayValue);
+      if (label) sizes.push({ label, status, ...(variantId ? { variantId } : {}), ...(pageUrl ? { url: pageUrl } : {}) });
+    }
+  }
+  return sizes;
+}
+
+export function enrichBirkenstockProductWithVariation(product: ProductDraft, payload: unknown, sourceUrl: string): ProductDraft {
+  const apiProduct = asRecord(asRecord(payload).product);
+  if (!apiProduct.id || !Array.isArray(apiProduct.variationAttributes)) return product;
+  const attributes = asRecords(apiProduct.variationAttributes);
+  const colorAttribute = attributes.find((attribute) => textValue(attribute.id ?? attribute.attributeId).toLowerCase() === "color");
+  const sizeAttribute = attributes.find((attribute) => textValue(attribute.id ?? attribute.attributeId).toLowerCase() === "size");
+  const colorValues = asRecords(colorAttribute?.values).filter((value) => value.visible !== false);
+  const selectedColorValue = colorValues.find((value) => value.selected === true)
+    ?? colorValues.find((value) => textValue(value.displayValue) === textValue(apiProduct.colorName));
+  const selectedColor = textValue(selectedColorValue?.displayValue ?? apiProduct.colorName);
+  const selectedPageUrl = absoluteUrl(selectedColorValue?.variationGroupUrl ?? apiProduct.selectedProductUrl, sourceUrl) || sourceUrl;
+  const sizes = birkenstockSizes(asRecords(sizeAttribute?.values), selectedPageUrl);
+  const colors = colorValues.map((value) => {
+    const label = textValue(value.displayValue);
+    const colorUrl = absoluteUrl(value.variationGroupUrl, sourceUrl) || selectedPageUrl;
+    return {
+      label,
+      imageUrl: birkenstockImage(value),
+      sizes: label === selectedColor ? sizes : [],
+      ...(colorUrl ? { url: colorUrl } : {}),
+      ...(textValue(value.id) ? { variantId: textValue(value.id) } : {}),
+    };
+  }).filter((color) => color.label);
+  const price = Number(asRecord(asRecord(apiProduct.price).sales).value);
+
+  return {
+    ...product,
+    url: selectedPageUrl,
+    title: textValue(apiProduct.productName) || product.title,
+    brand: textValue(apiProduct.brand) || product.brand,
+    retailer: "Birkenstock",
+    imageUrl: birkenstockImage(selectedColorValue ?? {}, 655) || product.imageUrl,
+    priceCents: Number.isFinite(price) && price > 0 ? Math.round(price * 100) : product.priceCents,
+    currency: textValue(asRecord(asRecord(apiProduct.price).sales).currency) || product.currency,
+    category: "Shoes",
+    selectedColor,
+    selectedSize: "",
+    status: "unknown",
+    sizes,
+    colors,
+  };
+}
+
 function shopifyVariantImage(variant: JsonRecord) {
   const featuredImage = asRecord(variant.featured_image);
   const previewImage = asRecord(asRecord(variant.featured_media).preview_image);

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  enrichBirkenstockProductWithVariation,
   enrichGuProductWithInventory,
   enrichShopifyProductWithVariants,
+  getBirkenstockVariationUrl,
   getGuInventoryUrl,
   getShopifyProductJsonUrl,
   isSafePublicUrl,
@@ -312,6 +314,48 @@ test("reads Foot Locker shoe category, colors, sizes, and availability from hydr
   assert.deepEqual(result.colors?.map((color) => ({ label: color.label, sizes: color.sizes.length })), [
     { label: "White/White", sizes: 2 },
     { label: "Black/Black", sizes: 1 },
+  ]);
+});
+
+test("reads Birkenstock colors and gender-specific US size availability", () => {
+  const sourceUrl = "https://www.birkenstock.com/us/boston/boston-u_49.html";
+  const variationUrl = "https://www.birkenstock.com/on/demandware.store/Sites-US-Site/en_US/Product-Variation?color=49&pid=boston-u_49";
+  const html = `<meta property="og:title" content="Boston Soft Footbed"><button class="m-attribute_color" aria-checked="true" data-attr-url="${variationUrl.replace("&", "&amp;")}"></button>`;
+  const parsed = parseProductHtml(html, sourceUrl);
+  const image = (url) => ({ small: [{ url, absURL: url }] });
+  const result = enrichBirkenstockProductWithVariation(parsed, {
+    product: {
+      id: "boston-u_49",
+      productName: "Boston Soft Footbed",
+      brand: "Birkenstock",
+      colorName: "Black",
+      selectedProductUrl: "/us/boston/boston-u_49.html",
+      price: { sales: { value: 169.95, currency: "USD" } },
+      variationAttributes: [
+        { id: "color", values: [
+          { id: "49", displayValue: "Black", selected: true, visible: true, variationGroupUrl: "/us/boston/boston-u_49.html", images: image("https://image.example/black.jpg?sw=160") },
+          { id: "46", displayValue: "Taupe", selected: false, visible: true, variationGroupUrl: "/us/boston/boston-u_46.html", images: image("https://image.example/taupe.jpg?sw=160") },
+        ] },
+        { id: "size", values: [
+          { id: "225", displayValue: JSON.stringify({ wsize: "35;4-4.5", msize: "" }), selectable: false },
+          { id: "250", displayValue: JSON.stringify({ wsize: "39;8-8.5", msize: "39;6-6.5" }), selectable: true },
+        ] },
+      ],
+    },
+  }, sourceUrl);
+
+  assert.equal(getBirkenstockVariationUrl(sourceUrl, html), variationUrl);
+  assert.equal(result.category, "Shoes");
+  assert.equal(result.selectedColor, "Black");
+  assert.equal(result.priceCents, 16995);
+  assert.deepEqual(result.sizes.map(({ label, status }) => ({ label, status })), [
+    { label: "Women's US 4-4.5", status: "out-of-stock" },
+    { label: "Women's US 8-8.5", status: "in-stock" },
+    { label: "Men's US 6-6.5", status: "in-stock" },
+  ]);
+  assert.deepEqual(result.colors?.map((color) => ({ label: color.label, sizes: color.sizes.length })), [
+    { label: "Black", sizes: 3 },
+    { label: "Taupe", sizes: 0 },
   ]);
 });
 

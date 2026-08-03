@@ -1,6 +1,8 @@
 import {
+  enrichBirkenstockProductWithVariation,
   enrichGuProductWithInventory,
   enrichShopifyProductWithVariants,
+  getBirkenstockVariationUrl,
   getGuInventoryUrl,
   getShopifyProductJsonUrl,
   isSafePublicUrl,
@@ -92,6 +94,24 @@ export async function POST(request: Request) {
         }
       } catch {
         // The page import still works when a Shopify storefront blocks its optional variant feed.
+      }
+    }
+    const birkenstockVariationUrl = getBirkenstockVariationUrl(sourceUrl, html);
+    if (birkenstockVariationUrl) {
+      try {
+        const variationResponse = await fetch(birkenstockVariationUrl, {
+          headers: {
+            "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+          },
+          signal: AbortSignal.timeout(6000),
+        });
+        if (variationResponse.ok) {
+          product = enrichBirkenstockProductWithVariation(product, await variationResponse.json(), sourceUrl);
+        }
+      } catch {
+        // Keep the base product details if Birkenstock's variation service is temporarily unavailable.
       }
     }
     const hasUsefulData = product.title !== "Untitled product" || !!product.imageUrl || product.priceCents !== null;

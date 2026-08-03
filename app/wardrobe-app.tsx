@@ -7,6 +7,7 @@ import { productFromRow, productToRow, type ProductRow } from "../lib/product-st
 import {
   defaultSizeProfile,
   emptySizeProfile,
+  matchesSizingPreference,
   normalizeSize,
   preferredSizeForProduct,
   sizeGroupsFor,
@@ -198,6 +199,7 @@ export function WardrobeApp() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [refreshingId, setRefreshingId] = useState("");
+  const [colorLoading, setColorLoading] = useState("");
   const [sizeProfile, setSizeProfile] = useState<SizeProfile>(defaultSizeProfile);
   const [profileDraft, setProfileDraft] = useState<SizeProfile>(defaultSizeProfile);
   const [profileSizing, setProfileSizing] = useState<SizingPreference>("mens");
@@ -330,6 +332,8 @@ export function WardrobeApp() {
       return collectionMatches && categoryMatches && textMatches;
     });
   }, [collection, filter, products, query]);
+  const sizingPreference = accountProfile?.sizingPreference ?? "mens";
+  const displayedDraftSizes = draft.sizes.filter((size) => matchesSizingPreference(size.label, sizingPreference));
 
   function commitLocalProducts(next: SavedProduct[]) {
     setProducts(next);
@@ -576,17 +580,46 @@ export function WardrobeApp() {
     });
   }
 
-  function chooseColor(colorLabel: string) {
+  async function chooseColor(colorLabel: string) {
     const color = draft.colors?.find((option) => option.label === colorLabel);
     if (!color) return;
-    const matchingSize = color.sizes.find((option) => option.label === draft.selectedSize);
+    if (!color.sizes.length && color.url) {
+      setColorLoading(colorLabel);
+      setError("");
+      try {
+        const response = await fetch("/api/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: color.url }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "This color could not be loaded.");
+        const product = data.product as ProductDraft;
+        const preferredSize = preferredSizeForProduct(product, sizeProfile, sizingPreference);
+        if (preferredSize) {
+          product.selectedSize = preferredSize.label;
+          product.status = preferredSize.status;
+          product.url = preferredSize.url || withVariant(product.url, preferredSize.variantId);
+        }
+        setDraft({ ...product, canonicalUrl: draft.canonicalUrl });
+        setNotice(preferredSize ? `Loaded ${colorLabel} and selected ${preferredSize.label} from your size profile.` : `Loaded sizes for ${colorLabel}.`);
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : "This color could not be loaded.");
+      } finally {
+        setColorLoading("");
+      }
+      return;
+    }
+    const matchingSize = color.sizes.find((option) => option.label === draft.selectedSize && matchesSizingPreference(option.label, sizingPreference))
+      ?? preferredSizeForProduct({ category: draft.category, sizes: color.sizes }, sizeProfile, sizingPreference);
     setDraft({
       ...draft,
       url: matchingSize?.url || color.url || withVariant(draft.url, matchingSize?.variantId ?? color.variantId),
       imageUrl: color.imageUrl || draft.imageUrl,
       selectedColor: color.label,
       sizes: color.sizes,
-      status: draft.selectedSize ? matchingSize?.status ?? "unknown" : "unknown",
+      selectedSize: matchingSize?.label ?? "",
+      status: matchingSize?.status ?? "unknown",
     });
   }
 
@@ -724,6 +757,7 @@ export function WardrobeApp() {
     setDraft(emptyDraft());
     setError("");
     setNotice("");
+    setColorLoading("");
   }
 
   return (
@@ -990,11 +1024,11 @@ export function WardrobeApp() {
                     <label>Choose a color</label>
                     <div className="color-options">
                       {draft.colors.map((color) => (
-                        <button type="button" key={color.label} onClick={() => chooseColor(color.label)} className={draft.selectedColor === color.label ? "selected" : ""}>
+                        <button type="button" key={color.label} onClick={() => void chooseColor(color.label)} className={draft.selectedColor === color.label ? "selected" : ""} disabled={Boolean(colorLoading)}>
                           <span className="color-thumb">
                             {color.imageUrl ? <Image loader={sourceImageLoader} src={color.imageUrl} alt="" fill sizes="48px" unoptimized /> : color.label.slice(0, 1)}
                           </span>
-                          <span>{color.label}</span>
+                          <span>{colorLoading === color.label ? "Loading…" : color.label}</span>
                         </button>
                       ))}
                     </div>
@@ -1024,9 +1058,9 @@ export function WardrobeApp() {
                     <label>Size to track <span>(optional)</span></label>
                     {!!sizeProfile[draft.category]?.length && <small>Your {draft.category.toLowerCase()} sizes: {sizeProfile[draft.category].join(" + ")}</small>}
                   </div>
-                  {draft.sizes.length ? (
+                  {displayedDraftSizes.length ? (
                     <div className="size-options">
-                      {draft.sizes.map((size) => (
+                      {displayedDraftSizes.map((size) => (
                         <button type="button" key={size.label} onClick={() => chooseSize(size.label)} className={draft.selectedSize === size.label ? "selected" : ""}>
                           {size.label}<small>{size.status === "in-stock" ? "Available" : size.status === "out-of-stock" ? "Sold out" : "Unknown"}</small>
                         </button>

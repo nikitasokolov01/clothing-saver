@@ -39,7 +39,7 @@ export function sizeGroupsFor(preference: SizingPreference) {
 }
 
 export function normalizeSize(size: string) {
-  const compact = size.trim().toUpperCase().replace(/[._-]/g, " ").replace(/\s+/g, " ");
+  const compact = size.trim().toUpperCase().replace(/[_-]/g, " ").replace(/\s+/g, " ");
   const aliases: Record<string, string> = {
     "X SMALL": "XS",
     "EXTRA SMALL": "XS",
@@ -67,7 +67,11 @@ function sizeKeys(size: string) {
     .replace(/\bUS\s+[MW]\s+(?=\d)/g, "US ")
     .replace(/\s+/g, " ")
     .trim();
-  return new Set([normalized, normalized.replace(/^US\s+/, "")]);
+  const keys = new Set([normalized, normalized.replace(/^US\s+/, "")]);
+  if (/\bUS\b/.test(normalized)) {
+    for (const number of normalized.match(/\d+(?:\.\d+)?/g) ?? []) keys.add(number);
+  }
+  return keys;
 }
 
 function sizesMatch(left: string, right: string) {
