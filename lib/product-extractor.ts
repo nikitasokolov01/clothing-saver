@@ -610,6 +610,10 @@ export function getMulebuySourceUrl(sourceUrl: string) {
     const platform = (url.searchParams.get("platform") ?? "").toUpperCase();
     if (!/^\d{5,24}$/.test(id)) return null;
     if (platform === "WEIDIAN") return `https://weidian.com/item.html?itemID=${id}`;
+    // Mulebuy groups both Taobao and Tmall listings under TAOBAO and links
+    // them through Tmall's shared item detail endpoint.
+    if (platform === "TAOBAO" || platform === "TMALL") return `https://detail.tmall.com/item.htm?id=${id}`;
+    if (platform === "ALI_1688" || platform === "1688") return `https://detail.1688.com/offer/${id}.html`;
     return null;
   } catch {
     return null;

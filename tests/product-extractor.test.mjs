@@ -83,6 +83,25 @@ test("resolves a Mulebuy Weidian link and reads its original CNY variants", () =
   assert.ok(mulebuyProduct.sizes.every((size) => size.url === mulebuyUrl));
 });
 
+test("resolves Mulebuy Taobao, Tmall, and 1688 source links", () => {
+  assert.equal(
+    getMulebuySourceUrl("https://mulebuy.com/product?id=909340041645&platform=TAOBAO"),
+    "https://detail.tmall.com/item.htm?id=909340041645",
+  );
+  assert.equal(
+    getMulebuySourceUrl("https://mulebuy.com/product?id=909340041645&platform=TMALL"),
+    "https://detail.tmall.com/item.htm?id=909340041645",
+  );
+  assert.equal(
+    getMulebuySourceUrl("https://mulebuy.com/product?id=1012260586454&platform=ALI_1688&ref=200477819"),
+    "https://detail.1688.com/offer/1012260586454.html",
+  );
+  assert.equal(
+    getMulebuySourceUrl("https://mulebuy.com/product?id=1012260586454&platform=1688"),
+    "https://detail.1688.com/offer/1012260586454.html",
+  );
+});
+
 test("rejects local and private product URLs", () => {
   assert.equal(isSafePublicUrl("https://example.com/product"), true);
   assert.equal(isSafePublicUrl("http://localhost:3000/product"), false);

@@ -27,6 +27,7 @@ The migration creates account-owned `products` and `profiles` tables. Row Level 
 ## Current MVP
 
 - Imports product metadata from public retailer pages
+- Recognizes Mulebuy links backed by Weidian, Taobao, Tmall, and 1688 while preserving the original Mulebuy link
 - Lets you review and correct imported details
 - Supports email/password sign-up, login, session refresh, and logout with Supabase
 - Saves products and size preferences per account when Supabase is configured

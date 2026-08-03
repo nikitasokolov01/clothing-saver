@@ -65,6 +65,16 @@ export async function POST(request: Request) {
     }
 
     const html = (await response.text()).slice(0, 2_000_000);
+    if (mulebuySourceUrl && /_____tmd_____|performing security verification|unusual traffic|access denied/i.test(html)) {
+      return Response.json(
+        {
+          error: "This marketplace is blocking the automatic product check right now. The Mulebuy link is supported, but you’ll need to review the item manually this time.",
+          manual: true,
+          normalizedUrl,
+        },
+        { status: 422 },
+      );
+    }
     const sourceUrl = response.url || fetchUrl;
     let product = parseProductHtml(html, sourceUrl);
     if (mulebuySourceUrl) product = keepMulebuyProductLink(product, normalizedUrl);
