@@ -4,8 +4,10 @@ import {
   enrichShopifyProductWithVariants,
   getBirkenstockVariationUrl,
   getGuInventoryUrl,
+  getMulebuySourceUrl,
   getShopifyProductJsonUrl,
   isSafePublicUrl,
+  keepMulebuyProductLink,
   normalizeProductUrl,
   parseProductHtml,
 } from "../../../lib/product-extractor";
@@ -26,7 +28,13 @@ export async function POST(request: Request) {
       return Response.json({ error: "That link cannot be accessed safely." }, { status: 400 });
     }
 
-    const response = await fetch(normalizedUrl, {
+    const mulebuySourceUrl = getMulebuySourceUrl(normalizedUrl);
+    const fetchUrl = mulebuySourceUrl ?? normalizedUrl;
+    if (!isSafePublicUrl(fetchUrl)) {
+      return Response.json({ error: "That product source cannot be accessed safely." }, { status: 400 });
+    }
+
+    const response = await fetch(fetchUrl, {
       headers: {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
@@ -57,8 +65,9 @@ export async function POST(request: Request) {
     }
 
     const html = (await response.text()).slice(0, 2_000_000);
-    const sourceUrl = response.url || normalizedUrl;
+    const sourceUrl = response.url || fetchUrl;
     let product = parseProductHtml(html, sourceUrl);
+    if (mulebuySourceUrl) product = keepMulebuyProductLink(product, normalizedUrl);
     const guInventoryUrl = getGuInventoryUrl(sourceUrl);
     if (guInventoryUrl) {
       try {

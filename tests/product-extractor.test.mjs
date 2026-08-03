@@ -6,8 +6,10 @@ import {
   enrichShopifyProductWithVariants,
   getBirkenstockVariationUrl,
   getGuInventoryUrl,
+  getMulebuySourceUrl,
   getShopifyProductJsonUrl,
   isSafePublicUrl,
+  keepMulebuyProductLink,
   normalizeProductUrl,
   parseProductHtml,
   statusForSize,
@@ -23,6 +25,62 @@ test("normalizes tracking parameters while preserving product options", () => {
     normalizeProductUrl("https://shop.example/products/tee?_su_rec=abc&_su_rec_id=123&variant=blue"),
     "https://shop.example/products/tee?variant=blue",
   );
+});
+
+test("resolves a Mulebuy Weidian link and reads its original CNY variants", () => {
+  const mulebuyUrl = "https://mulebuy.com/product?id=7779563335&platform=WEIDIAN";
+  const weidianUrl = "https://weidian.com/item.html?itemID=7779563335";
+  assert.equal(getMulebuySourceUrl(mulebuyUrl), weidianUrl);
+
+  const payload = {
+    result: {
+      default_model: {
+        item_info: {
+          itemLowPrice: 41000,
+          item_head: "https://si.geilicdn.com/green-jacket.jpg",
+          item_name: "Green jacket",
+          stock: 12,
+        },
+        shop_info: { shopName: "çç§å®å¶" },
+        sku_properties: {
+          attr_list: [{
+            attr_title: "size",
+            attr_values: [
+              { attr_id: 1, attr_value: "S", img: "" },
+              { attr_id: 2, attr_value: "M", img: "" },
+              { attr_id: 3, attr_value: "L", img: "" },
+              { attr_id: 4, attr_value: "XL", img: "" },
+            ],
+          }],
+          sku: {
+            small: { attr_ids: "1", id: 101, img: "https://si.geilicdn.com/green-jacket.jpg", price: "410.00", stock: 3 },
+            medium: { attr_ids: "2", id: 102, img: "https://si.geilicdn.com/green-jacket.jpg", price: "410.00", stock: 4 },
+            large: { attr_ids: "3", id: 103, img: "https://si.geilicdn.com/green-jacket.jpg", price: "410.00", stock: 5 },
+            xl: { attr_ids: "4", id: 104, img: "https://si.geilicdn.com/green-jacket.jpg", price: "410.00", stock: 0 },
+          },
+        },
+      },
+    },
+  };
+  const encoded = JSON.stringify(payload).replace(/&/g, "&amp;").replace(/"/g, "&#34;");
+  const product = parseProductHtml(`<script id="__rocker-render-inject__" data-obj="${encoded}"></script>`, weidianUrl);
+  assert.equal(product.title, "Green jacket");
+  assert.equal(product.brand, "燃烧定制");
+  assert.equal(product.priceCents, 41000);
+  assert.equal(product.currency, "CNY");
+  assert.equal(product.category, "Outerwear");
+  assert.deepEqual(product.sizes.map(({ label, status }) => ({ label, status })), [
+    { label: "S", status: "in-stock" },
+    { label: "M", status: "in-stock" },
+    { label: "L", status: "in-stock" },
+    { label: "XL", status: "out-of-stock" },
+  ]);
+
+  const mulebuyProduct = keepMulebuyProductLink(product, mulebuyUrl);
+  assert.equal(mulebuyProduct.url, mulebuyUrl);
+  assert.equal(mulebuyProduct.canonicalUrl, mulebuyUrl);
+  assert.equal(mulebuyProduct.retailer, "Mulebuy");
+  assert.ok(mulebuyProduct.sizes.every((size) => size.url === mulebuyUrl));
 });
 
 test("rejects local and private product URLs", () => {

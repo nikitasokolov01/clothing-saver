@@ -122,7 +122,9 @@ function decodeHtml(value: string) {
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&apos;/g, "'")
     .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
+    .replace(/&gt;/g, ">")
+    .replace(/&#(\d+);/g, (_match, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code: string) => String.fromCodePoint(Number.parseInt(code, 16)));
 }
 
 function asRecords(value: unknown) {
@@ -489,6 +491,142 @@ function embeddedStorefrontPriceCents(html: string) {
 
 function asRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
+function isWeidianUrl(sourceUrl: string) {
+  try {
+    const host = new URL(sourceUrl).hostname.toLowerCase();
+    return host === "weidian.com" || host.endsWith(".weidian.com");
+  } catch {
+    return false;
+  }
+}
+
+function weidianAttributeKind(title: string, values: string[]) {
+  if (/colou?r|颜色|顏色|色号|色號/i.test(title)) return "color";
+  if (/size|尺码|尺碼|尺寸|鞋码|鞋碼|型号|型號/i.test(title)) return "size";
+  if (values.length && values.every((value) => /^(?:X{0,3}S|X{0,4}L|M|L|\d{1,3}(?:\.5)?(?:[-/]\d{1,3}(?:\.5)?)?)$/i.test(value.trim()))) return "size";
+  return "other";
+}
+
+function repairUtf8Mojibake(value: string) {
+  if (!/[\u0080-\u009fÃÂâçå]/.test(value) || [...value].some((character) => character.charCodeAt(0) > 255)) return value;
+  const repaired = new TextDecoder().decode(Uint8Array.from([...value].map((character) => character.charCodeAt(0))));
+  return repaired.includes("�") ? value : repaired;
+}
+
+function extractWeidianProduct(html: string, sourceUrl: string): ProductDraft | null {
+  if (!isWeidianUrl(sourceUrl)) return null;
+  const payloadTag = html.match(/<script\b[^>]*id=["']__rocker-render-inject__["'][^>]*>/i)?.[0];
+  if (!payloadTag) return null;
+
+  let payload: JsonRecord;
+  try {
+    payload = asRecord(JSON.parse(readTagAttributes(payloadTag).get("data-obj") ?? ""));
+  } catch {
+    return null;
+  }
+
+  const model = asRecord(asRecord(payload.result).default_model);
+  const item = asRecord(model.item_info);
+  const shop = asRecord(model.shop_info);
+  const skuProperties = asRecord(model.sku_properties);
+  const groups = asRecords(skuProperties.attr_list).map((group) => {
+    const values = asRecords(group.attr_values);
+    const title = textValue(group.attr_title);
+    return {
+      title,
+      kind: weidianAttributeKind(title, values.map((value) => textValue(value.attr_value))),
+      values,
+    };
+  });
+  const attributes = new Map<string, { kind: string; label: string; imageUrl: string }>();
+  for (const group of groups) {
+    for (const value of group.values) {
+      const id = textValue(value.attr_id);
+      if (!id) continue;
+      attributes.set(id, {
+        kind: group.kind,
+        label: textValue(value.attr_value),
+        imageUrl: textValue(value.img),
+      });
+    }
+  }
+
+  const itemImage = textValue(item.item_head ?? item.item_head_thumb);
+  const itemPriceCents = Number(item.itemLowPrice);
+  const rows = Object.values(asRecord(skuProperties.sku)).map((value): NormalizedVariant => {
+    const sku = asRecord(value);
+    const selectedAttributes = (textValue(sku.attr_ids).match(/\d+/g) ?? [])
+      .map((id) => attributes.get(id))
+      .filter((attribute): attribute is { kind: string; label: string; imageUrl: string } => Boolean(attribute));
+    const size = selectedAttributes.find((attribute) => attribute.kind === "size")?.label ?? "";
+    const color = selectedAttributes.find((attribute) => attribute.kind === "color")?.label
+      ?? (groups.length > 1 ? selectedAttributes.find((attribute) => attribute.kind === "other")?.label : "")
+      ?? "";
+    const stock = Number(sku.stock);
+    const price = Number(sku.price ?? sku.origin_price);
+    return {
+      id: textValue(sku.id),
+      color,
+      size,
+      status: Number.isFinite(stock) ? stock > 0 ? "in-stock" : "out-of-stock" : "unknown",
+      imageUrl: textValue(sku.img) || selectedAttributes.map((attribute) => attribute.imageUrl).find(Boolean) || itemImage,
+      url: sourceUrl,
+      priceCents: Number.isFinite(price) && price > 0 ? Math.round(price * 100) : null,
+      currency: "CNY",
+    };
+  });
+  const matrix = buildVariantMatrix(rows);
+  const title = repairUtf8Mojibake(textValue(item.item_name)) || "Untitled product";
+  const brand = repairUtf8Mojibake(textValue(shop.shopName ?? shop.shop_name));
+  const sizes = matrix?.sizes ?? [];
+  const itemStock = Number(item.stock);
+
+  return {
+    url: sourceUrl,
+    canonicalUrl: normalizeProductUrl(sourceUrl),
+    title,
+    brand,
+    retailer: brand || "Weidian",
+    imageUrl: matrix?.imageUrl || itemImage,
+    priceCents: matrix?.priceCents ?? (Number.isFinite(itemPriceCents) && itemPriceCents > 0 ? Math.round(itemPriceCents) : null),
+    currency: "CNY",
+    category: guessCategory(title),
+    selectedSize: "",
+    selectedColor: matrix?.selectedColor ?? "",
+    status: sizes.length ? "unknown" : Number.isFinite(itemStock) ? itemStock > 0 ? "in-stock" : "out-of-stock" : "unknown",
+    sizes,
+    colors: matrix?.colors.length ? matrix.colors : undefined,
+  };
+}
+
+export function getMulebuySourceUrl(sourceUrl: string) {
+  try {
+    const url = new URL(sourceUrl);
+    const host = url.hostname.toLowerCase();
+    if ((host !== "mulebuy.com" && !host.endsWith(".mulebuy.com")) || url.pathname.replace(/\/+$/, "") !== "/product") return null;
+    const id = url.searchParams.get("id") ?? "";
+    const platform = (url.searchParams.get("platform") ?? "").toUpperCase();
+    if (!/^\d{5,24}$/.test(id)) return null;
+    if (platform === "WEIDIAN") return `https://weidian.com/item.html?itemID=${id}`;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function keepMulebuyProductLink(product: ProductDraft, mulebuyUrl: string): ProductDraft {
+  const url = normalizeProductUrl(mulebuyUrl);
+  const remapSizes = (sizes: SizeOption[]) => sizes.map((size) => ({ ...size, url }));
+  return {
+    ...product,
+    url,
+    canonicalUrl: url,
+    retailer: "Mulebuy",
+    sizes: remapSizes(product.sizes),
+    colors: product.colors?.map((color) => ({ ...color, url, sizes: remapSizes(color.sizes) })),
+  };
 }
 
 function extractGuPreloadedState(html: string) {
@@ -918,6 +1056,9 @@ export function guessCategory(text: string) {
 }
 
 export function parseProductHtml(html: string, sourceUrl: string): ProductDraft {
+  const weidianProduct = extractWeidianProduct(html, sourceUrl);
+  if (weidianProduct) return weidianProduct;
+
   const objects: JsonRecord[] = [];
   const scriptPattern = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
   for (const match of html.matchAll(scriptPattern)) {
