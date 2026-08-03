@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { SocialHeader } from "../../_components/social-header";
 import { SocialProductCard } from "../../_components/social-product-card";
@@ -134,7 +135,7 @@ export function ProfileClient({ username }: { username: string }) {
 
   return (
     <main className="social-shell">
-      <SocialHeader />
+      <Suspense fallback={<div className="social-header" />}><SocialHeader /></Suspense>
       {loading ? <div className="social-loading">Loading profile…</div> : !profile ? (
         <section className="social-empty"><span>404</span><h1>Profile not found.</h1><p>That username may have changed.</p></section>
       ) : (
@@ -149,6 +150,7 @@ export function ProfileClient({ username }: { username: string }) {
               <div className="profile-counts"><span><strong>{profile.follower_count}</strong> followers</span><span><strong>{profile.following_count}</strong> following</span></div>
             </div>
             <div className="profile-actions">
+              {isOwner && <Link className="primary-button" href="/profile">Manage saved pieces</Link>}
               {!isOwner && <button className={relationship ? "secondary-button" : "primary-button"} type="button" disabled={pending} onClick={toggleFollow}>{pending ? "Please wait…" : followActionLabel(relationship?.status ?? null, profile.is_private)}</button>}
               <button className="secondary-button" type="button" onClick={shareProfile}>Share profile</button>
             </div>

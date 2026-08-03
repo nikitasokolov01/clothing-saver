@@ -55,7 +55,7 @@ export function FeedClient() {
 
       const [profileResult, productResult] = await Promise.all([
         supabase.from("social_profiles").select("*").in("user_id", followingIds),
-        supabase.from("products").select("*").in("user_id", followingIds).order("updated_at", { ascending: false }).limit(100),
+        supabase.from("products").select("*").in("user_id", followingIds).eq("collection", "saved").order("created_at", { ascending: false }).limit(100),
       ]);
       if (!active) return;
       if (profileResult.error || productResult.error) {
@@ -77,16 +77,19 @@ export function FeedClient() {
   return (
     <main className="social-shell">
       <SocialHeader />
-      <section className="social-page-heading">
-        <p className="kicker">Following</p>
-        <h1>Your style feed.</h1>
-        <p>New saves and closet additions from people you follow.</p>
+      <section className="social-page-heading with-action">
+        <div>
+          <p className="kicker">Following</p>
+          <h1>Your feed.</h1>
+          <p>The newest pieces your friends saved, all in one place.</p>
+        </div>
+        <Link className="primary-button feed-add-button" href="/profile?add=1">Add a piece</Link>
       </section>
       {error && <div className="toast error" role="alert">{error}<button onClick={() => setError("")} aria-label="Dismiss">×</button></div>}
       {loading ? <div className="social-loading">Loading your feed…</div> : !signedIn ? (
-        <section className="social-empty"><span>Members only</span><h2>Log in to build your feed.</h2><p>Return to your wardrobe to log in or create an account.</p><Link className="primary-button" href="/">Go to wardrobe</Link></section>
+        <section className="social-empty"><span>Members only</span><h2>Log in to build your feed.</h2><p>Sign in to see recent saves from people you follow.</p><Link className="primary-button" href="/">Log in</Link></section>
       ) : !followingCount ? (
-        <section className="social-empty"><span>Start following</span><h2>Your feed is ready for people.</h2><p>Open someone’s shared profile link and follow them to see their pieces here.</p></section>
+        <section className="social-empty"><span>Start following</span><h2>Your feed is ready for friends.</h2><p>Find someone you know, follow their profile, and their latest saved pieces will show up here.</p><Link className="primary-button" href="/people">Find people</Link></section>
       ) : items.length ? (
         <div className="feed-list">{items.map(({ product, owner }) => <SocialProductCard product={product} owner={owner} key={product.id} />)}</div>
       ) : (

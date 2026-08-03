@@ -2,7 +2,9 @@
 
 import { FormEvent, useEffect, useMemo, useState, type CSSProperties } from "react";
 import Image, { type ImageLoaderProps } from "next/image";
+import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
+import { SocialHeader } from "./_components/social-header";
 import { convertCurrencyCents, displayCurrencies, normalizeCurrency } from "../lib/currency";
 import { productFromRow, productToRow, type ProductRow } from "../lib/product-storage";
 import { mergeProductRefresh, salePercentage } from "../lib/product-refresh";
@@ -17,6 +19,7 @@ import {
   type SizingPreference,
 } from "../lib/size-profile";
 import { createClient, isSupabaseConfigured } from "../lib/supabase/client";
+import type { SocialProfile } from "../lib/social";
 import type { ProductDraft, SavedProduct, StockStatus } from "../lib/types";
 
 const categories = ["All", "Tops", "Bottoms", "Shoes", "Outerwear", "Accessories", "Underwear", "Other"];
@@ -209,7 +212,8 @@ function ProductImage({ product }: { product: Pick<SavedProduct, "imageUrl" | "t
   return <Image loader={sourceImageLoader} src={product.imageUrl} alt={product.title} fill sizes="(max-width: 820px) 40vw, 240px" unoptimized onError={() => setFailed(true)} />;
 }
 
-export function WardrobeApp() {
+export function WardrobeApp({ mode = "landing", focusImporter = false }: { mode?: "landing" | "profile"; focusImporter?: boolean }) {
+  const profileMode = mode === "profile";
   const [products, setProducts] = useState<SavedProduct[]>(samples);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("All");
@@ -229,6 +233,7 @@ export function WardrobeApp() {
   const [profileSizing, setProfileSizing] = useState<SizingPreference>("mens");
   const [profileOpen, setProfileOpen] = useState(false);
   const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
+  const [socialProfile, setSocialProfile] = useState<SocialProfile | null>(null);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(1);
   const [onboardingName, setOnboardingName] = useState("");
@@ -253,9 +258,10 @@ export function WardrobeApp() {
       let active = true;
       const loadAccount = async (account: User) => {
         setLoading(true);
-        const [productsResult, profileResult] = await Promise.all([
+        const [productsResult, profileResult, socialProfileResult] = await Promise.all([
           supabase.from("products").select("*").order("created_at", { ascending: false }),
           supabase.from("profiles").select("full_name,username,sizing_preference,preferred_currency,onboarding_completed,size_profile").eq("user_id", account.id).maybeSingle(),
+          supabase.from("social_profiles").select("*").eq("user_id", account.id).maybeSingle(),
         ]);
         if (!active) return;
         if (productsResult.error) setError(productsResult.error.message);
@@ -287,6 +293,8 @@ export function WardrobeApp() {
             setOnboardingOpen(false);
           }
         }
+        if (socialProfileResult.error) setError(socialProfileResult.error.message);
+        else setSocialProfile(socialProfileResult.data as SocialProfile | null);
         setLoading(false);
       };
       const initialize = async () => {
@@ -298,6 +306,7 @@ export function WardrobeApp() {
         else {
           setProducts([]);
           setAccountProfile(null);
+          setSocialProfile(null);
           setOnboardingOpen(false);
           setLoading(false);
         }
@@ -310,6 +319,7 @@ export function WardrobeApp() {
         else {
           setProducts([]);
           setAccountProfile(null);
+          setSocialProfile(null);
           setOnboardingOpen(false);
           setLoading(false);
         }
@@ -344,6 +354,13 @@ export function WardrobeApp() {
     }, 0);
     return () => window.clearTimeout(loadSavedProducts);
   }, [supabase]);
+
+  useEffect(() => {
+    if (!profileMode || !focusImporter || loading || !user) return;
+    const input = document.getElementById("product-url");
+    input?.scrollIntoView({ behavior: "smooth", block: "center" });
+    input?.focus();
+  }, [focusImporter, loading, profileMode, user]);
 
   const preferredCurrency = accountProfile?.preferredCurrency ?? "USD";
 
@@ -506,6 +523,7 @@ export function WardrobeApp() {
 
   async function finishOnboarding() {
     if (!supabase || !user) return;
+    const isFirstOnboarding = !accountProfile?.onboardingCompleted;
     const fullName = onboardingName.trim();
     const username = onboardingUsername.trim().toLowerCase();
     if (!fullName) {
@@ -547,6 +565,7 @@ export function WardrobeApp() {
     setSizeProfile(data.size_profile as SizeProfile);
     setOnboardingOpen(false);
     setNotice(accountProfile?.onboardingCompleted ? "Your profile was updated." : "You’re all set. Welcome to Saved.");
+    if (isFirstOnboarding) window.location.assign("/feed");
   }
 
   async function submitAuth(event: FormEvent) {
@@ -591,6 +610,7 @@ export function WardrobeApp() {
     setAuthOpen(false);
     setAuthPassword("");
     setNotice(authMode === "login" ? "Welcome back." : "Your account is ready.");
+    if (authMode === "login") window.location.assign("/feed");
   }
 
   async function signOut() {
@@ -854,8 +874,8 @@ export function WardrobeApp() {
   }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
+    <main className={profileMode ? "social-shell wardrobe-profile-shell" : "app-shell"}>
+      {profileMode ? <SocialHeader /> : <header className="topbar">
         <a className="brand" href="#top" aria-label="Saved wardrobe home">
           <span className="brand-mark">s</span>
           <span>Saved</span>
@@ -871,15 +891,37 @@ export function WardrobeApp() {
             </button>
           ) : <div className="local-badge"><span /> Local preview</div>}
         </div>
-      </header>
+      </header>}
 
-      <section className="intro" id="top">
+      {profileMode ? (
+        <section className="profile-hero wardrobe-profile-hero" id="top">
+          <div className="profile-avatar">{accountProfile?.fullName.slice(0, 1).toUpperCase() || accountProfile?.username.slice(0, 1).toUpperCase() || "S"}</div>
+          <div className="profile-identity">
+            <p className="kicker">Your profile</p>
+            <h1>{accountProfile?.fullName || "My wardrobe"}</h1>
+            {accountProfile?.username && <p className="profile-handle">@{accountProfile.username}</p>}
+            {socialProfile?.bio && <p className="profile-bio">{socialProfile.bio}</p>}
+            <div className="profile-counts profile-counts-wide">
+              <span><strong>{products.filter((product) => product.collection === "saved").length}</strong> saved</span>
+              <span><strong>{products.filter((product) => product.collection === "closet").length}</strong> closet</span>
+              <span><strong>{socialProfile?.follower_count ?? 0}</strong> followers</span>
+              <span><strong>{socialProfile?.following_count ?? 0}</strong> following</span>
+            </div>
+          </div>
+          <div className="profile-actions">
+            <button className="primary-button" type="button" onClick={() => document.getElementById("product-url")?.focus()}>Add piece</button>
+            <button className="secondary-button" type="button" onClick={openAccountProfile}>Edit profile</button>
+            {accountProfile?.username && <Link className="secondary-button" href={`/u/${accountProfile.username}`}>View public profile</Link>}
+            <button className="profile-menu-button" type="button" onClick={() => setAuthOpen(true)} aria-label="Open account settings">•••</button>
+          </div>
+        </section>
+      ) : <section className="intro" id="top">
         <div>
           <p className="kicker">Your personal wardrobe shortlist</p>
           <h1>Things you like,<br />{" "}all in one place.</h1>
         </div>
         <div className="intro-count"><strong>{products.filter((product) => product.collection === "saved").length}</strong><span>saved pieces</span></div>
-      </section>
+      </section>}
 
       <form className="import-pill" onSubmit={beginImport}>
         <span className="link-icon" aria-hidden="true">↗</span>
@@ -893,7 +935,7 @@ export function WardrobeApp() {
         <button type="button" onClick={openManual}>Add manually</button>
       </div>
 
-      <section className="wardrobe" aria-labelledby="wardrobe-title">
+      <section className={`wardrobe${profileMode ? " profile-wardrobe" : ""}`} aria-labelledby="wardrobe-title">
         <div className="collection-tabs" aria-label="Choose a collection">
           <button type="button" className={collection === "saved" ? "active" : ""} onClick={() => setCollection("saved")}>
             Saved <span>{products.filter((product) => product.collection === "saved").length}</span>
