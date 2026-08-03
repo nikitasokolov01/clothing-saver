@@ -11,11 +11,34 @@ const CATEGORY_RULES: Array<[string, RegExp]> = [
   ["Tops", /\b(shirt|tee|t-shirt|sweater|hoodie|blouse|top|cardigan|polo)\b/i],
 ];
 
+const MULEBUY_SHARE_PLATFORMS: Record<string, string> = {
+  "1688": "ALI_1688",
+  "ali_1688": "ALI_1688",
+  "taobao": "TAOBAO",
+  "tmall": "TMALL",
+  "weidian": "WEIDIAN",
+};
+
+function normalizeMulebuyShareUrl(url: URL) {
+  if (url.hostname.toLowerCase() !== "t.mulebuy.com") return url;
+
+  const id = url.searchParams.get("id")?.trim() ?? "";
+  const shopType = url.searchParams.get("shop_type")?.trim().toLowerCase() ?? "";
+  const platform = MULEBUY_SHARE_PLATFORMS[shopType];
+  if (!/^\d{5,24}$/.test(id) || !platform) return url;
+
+  const productUrl = new URL("https://mulebuy.com/product");
+  productUrl.searchParams.set("id", id);
+  productUrl.searchParams.set("platform", platform);
+  return productUrl;
+}
+
 export function normalizeProductUrl(raw: string) {
-  const parsed = new URL(raw.trim());
+  let parsed = new URL(raw.trim());
   if (!/^https?:$/.test(parsed.protocol)) {
     throw new Error("Use a web link beginning with http:// or https://.");
   }
+  parsed = normalizeMulebuyShareUrl(parsed);
   parsed.hash = "";
   const removable = [
     "utm_source",
@@ -603,7 +626,7 @@ function extractWeidianProduct(html: string, sourceUrl: string): ProductDraft | 
 
 export function getMulebuySourceUrl(sourceUrl: string) {
   try {
-    const url = new URL(sourceUrl);
+    const url = new URL(normalizeProductUrl(sourceUrl));
     const host = url.hostname.toLowerCase();
     if ((host !== "mulebuy.com" && !host.endsWith(".mulebuy.com")) || url.pathname.replace(/\/+$/, "") !== "/product") return null;
     const id = url.searchParams.get("id") ?? "";
