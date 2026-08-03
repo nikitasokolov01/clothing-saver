@@ -549,15 +549,17 @@ export function WardrobeApp() {
     setAuthPending(true);
     setError("");
     const identifier = authIdentifier.trim();
-    if (authMode === "signup" && !identifier.includes("@")) {
+    const isEmailIdentifier = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
+    const usernameIdentifier = identifier.startsWith("@") ? identifier.slice(1) : identifier;
+    if (authMode === "signup" && !isEmailIdentifier) {
       setAuthPending(false);
       setError("Use your email address to create an account.");
       return;
     }
     let result;
-    if (authMode === "login" && !identifier.includes("@")) {
+    if (authMode === "login" && !isEmailIdentifier) {
       const { data, error: functionError } = await supabase.functions.invoke("login-with-username", {
-        body: { username: identifier.toLowerCase(), password: authPassword },
+        body: { username: usernameIdentifier.toLowerCase(), password: authPassword },
       });
       if (functionError || !data?.access_token || !data?.refresh_token) {
         setAuthPending(false);
@@ -1025,7 +1027,7 @@ export function WardrobeApp() {
                 <p>Your saved pieces, sizes and closet will follow you between devices.</p>
                 {notice && <div className="form-message success">{notice}</div>}
                 {error && <div className="form-message error">{error}</div>}
-                <label>{authMode === "login" ? "Email or username" : "Email"}<input type={authMode === "login" ? "text" : "email"} autoComplete={authMode === "login" ? "username" : "email"} value={authIdentifier} onChange={(event) => setAuthIdentifier(event.target.value)} required /></label>
+                <label>{authMode === "login" ? "Email or username" : "Email"}<input type={authMode === "login" ? "text" : "email"} autoComplete={authMode === "login" ? "username" : "email"} placeholder={authMode === "login" ? "name@example.com or @username" : "name@example.com"} value={authIdentifier} onChange={(event) => setAuthIdentifier(event.target.value)} required /></label>
                 <label>Password<input type="password" minLength={6} autoComplete={authMode === "login" ? "current-password" : "new-password"} value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} required /></label>
                 <button className="primary-button" type="submit" disabled={authPending}>{authPending ? "Please wait…" : authMode === "login" ? "Log in" : "Create account"}</button>
                 <button className="auth-switch" type="button" onClick={() => setAuthMode(authMode === "login" ? "signup" : "login")}>
