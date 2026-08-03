@@ -27,6 +27,28 @@ test("normalizes tracking parameters while preserving product options", () => {
   );
 });
 
+test("normalizes Mulebuy mobile share links for every supported marketplace", () => {
+  const id = "7651730720";
+  const cases = [
+    ["weidian", "WEIDIAN"],
+    ["taobao", "TAOBAO"],
+    ["tmall", "TMALL"],
+    ["1688", "ALI_1688"],
+  ];
+
+  for (const [shopType, platform] of cases) {
+    assert.equal(
+      normalizeProductUrl(`https://t.mulebuy.com?t=t1000017&id=${id}&shop_type=${shopType}`),
+      `https://mulebuy.com/product?id=${id}&platform=${platform}`,
+    );
+  }
+
+  assert.equal(
+    getMulebuySourceUrl("https://t.mulebuy.com?t=t1000017&id=7651730720&shop_type=weidian"),
+    "https://weidian.com/item.html?itemID=7651730720",
+  );
+});
+
 test("resolves a Mulebuy Weidian link and reads its original CNY variants", () => {
   const mulebuyUrl = "https://mulebuy.com/product?id=7779563335&platform=WEIDIAN";
   const weidianUrl = "https://weidian.com/item.html?itemID=7779563335";
