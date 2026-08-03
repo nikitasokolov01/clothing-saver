@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState, type CSSProperties } from "react";
 import Image, { type ImageLoaderProps } from "next/image";
 import type { User } from "@supabase/supabase-js";
+import { convertCurrencyCents, displayCurrencies, normalizeCurrency } from "../lib/currency";
 import { productFromRow, productToRow, type ProductRow } from "../lib/product-storage";
 import {
   defaultSizeProfile,
@@ -27,6 +28,7 @@ type AccountProfile = {
   fullName: string;
   username: string;
   sizingPreference: SizingPreference;
+  preferredCurrency: string;
   onboardingCompleted: boolean;
 };
 
@@ -120,11 +122,27 @@ function retailerFromUrl(raw: string) {
 
 function formatMoney(cents: number | null, currency: string) {
   if (cents === null) return "Price unavailable";
+  const normalizedCurrency = normalizeCurrency(currency);
   try {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format(cents / 100);
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: normalizedCurrency, maximumFractionDigits: 2 }).format(cents / 100);
   } catch {
-    return `$${(cents / 100).toFixed(2)}`;
+    return `${(cents / 100).toFixed(2)} ${normalizedCurrency}`;
   }
+}
+
+function productPrice(product: SavedProduct, preferredCurrency: string, rates: Record<string, number>, rateTarget: string) {
+  const originalCurrency = normalizeCurrency(product.currency);
+  const displayCurrency = normalizeCurrency(preferredCurrency);
+  const original = formatMoney(product.priceCents, originalCurrency);
+  if (product.priceCents === null || originalCurrency === displayCurrency) {
+    return { primary: original, secondary: "" };
+  }
+  const rate = rateTarget === displayCurrency ? rates[originalCurrency] : undefined;
+  if (!rate) return { primary: original, secondary: "" };
+  return {
+    primary: `${formatMoney(convertCurrencyCents(product.priceCents, rate), displayCurrency)} ${displayCurrency}`,
+    secondary: `${original} ${originalCurrency} original`,
+  };
 }
 
 function timeAgo(value: string) {
@@ -210,8 +228,12 @@ export function WardrobeApp() {
   const [onboardingName, setOnboardingName] = useState("");
   const [onboardingUsername, setOnboardingUsername] = useState("");
   const [onboardingSizing, setOnboardingSizing] = useState<SizingPreference>("mens");
+  const [onboardingCurrency, setOnboardingCurrency] = useState("USD");
   const [onboardingSizes, setOnboardingSizes] = useState<SizeProfile>(emptySizeProfile);
   const [onboardingPending, setOnboardingPending] = useState(false);
+  const [currencyPending, setCurrencyPending] = useState(false);
+  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({ USD: 1 });
+  const [exchangeRateTarget, setExchangeRateTarget] = useState("USD");
   const [user, setUser] = useState<User | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
@@ -227,7 +249,7 @@ export function WardrobeApp() {
         setLoading(true);
         const [productsResult, profileResult] = await Promise.all([
           supabase.from("products").select("*").order("created_at", { ascending: false }),
-          supabase.from("profiles").select("full_name,username,sizing_preference,onboarding_completed,size_profile").eq("user_id", account.id).maybeSingle(),
+          supabase.from("profiles").select("full_name,username,sizing_preference,preferred_currency,onboarding_completed,size_profile").eq("user_id", account.id).maybeSingle(),
         ]);
         if (!active) return;
         if (productsResult.error) setError(productsResult.error.message);
@@ -242,6 +264,7 @@ export function WardrobeApp() {
             fullName: row.full_name || "",
             username: row.username || "",
             sizingPreference: sizing,
+            preferredCurrency: normalizeCurrency(row.preferred_currency || "USD"),
             onboardingCompleted: Boolean(row.onboarding_completed),
           } satisfies AccountProfile : null;
           setSizeProfile(savedSizes);
@@ -250,6 +273,7 @@ export function WardrobeApp() {
             setOnboardingName(profile?.fullName || "");
             setOnboardingUsername(profile?.username || "");
             setOnboardingSizing(sizing);
+            setOnboardingCurrency(profile?.preferredCurrency || "USD");
             setOnboardingSizes(savedSizes);
             setOnboardingStep(1);
             setOnboardingOpen(true);
@@ -313,6 +337,33 @@ export function WardrobeApp() {
     }, 0);
     return () => window.clearTimeout(loadSavedProducts);
   }, [supabase]);
+
+  const preferredCurrency = accountProfile?.preferredCurrency ?? "USD";
+
+  useEffect(() => {
+    const from = [...new Set(products
+      .map((product) => normalizeCurrency(product.currency, ""))
+      .filter((currency) => currency && currency !== preferredCurrency))];
+    if (!from.length) return;
+
+    const controller = new AbortController();
+    void fetch("/api/exchange-rates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: preferredCurrency }),
+      signal: controller.signal,
+    }).then(async (response) => {
+      if (!response.ok) return;
+      const result = await response.json() as { rates?: Record<string, number> };
+      if (result.rates) {
+        setExchangeRates(result.rates);
+        setExchangeRateTarget(preferredCurrency);
+      }
+    }).catch(() => {
+      // Cards continue to show their original prices while rates are unavailable.
+    });
+    return () => controller.abort();
+  }, [preferredCurrency, products]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -390,6 +441,7 @@ export function WardrobeApp() {
     setOnboardingName(accountProfile?.fullName || "");
     setOnboardingUsername(accountProfile?.username || "");
     setOnboardingSizing(accountProfile?.sizingPreference ?? "mens");
+    setOnboardingCurrency(accountProfile?.preferredCurrency ?? "USD");
     setOnboardingSizes(Object.fromEntries(Object.entries(sizeProfile).map(([category, sizes]) => [category, [...sizes]])));
     setOnboardingStep(1);
     setOnboardingOpen(true);
@@ -421,6 +473,24 @@ export function WardrobeApp() {
     setOnboardingSizes((current) => ({ ...current, Bottoms: [], Shoes: [] }));
   }
 
+  async function savePreferredCurrency(currency: string) {
+    if (!supabase || !user || currency === preferredCurrency) return;
+    const previous = preferredCurrency;
+    setCurrencyPending(true);
+    setAccountProfile((current) => current ? { ...current, preferredCurrency: currency } : current);
+    const { error: profileError } = await supabase.from("profiles").update({
+      preferred_currency: currency,
+      updated_at: new Date().toISOString(),
+    }).eq("user_id", user.id);
+    setCurrencyPending(false);
+    if (profileError) {
+      setAccountProfile((current) => current ? { ...current, preferredCurrency: previous } : current);
+      setError(profileError.message);
+      return;
+    }
+    setNotice(`Saved prices will now display in ${currency}.`);
+  }
+
   async function finishOnboarding() {
     if (!supabase || !user) return;
     const fullName = onboardingName.trim();
@@ -442,10 +512,11 @@ export function WardrobeApp() {
       full_name: fullName,
       username,
       sizing_preference: onboardingSizing,
+      preferred_currency: onboardingCurrency,
       size_profile: onboardingSizes,
       onboarding_completed: true,
       updated_at: new Date().toISOString(),
-    }).select("full_name,username,sizing_preference,onboarding_completed,size_profile").single();
+    }).select("full_name,username,sizing_preference,preferred_currency,onboarding_completed,size_profile").single();
     setOnboardingPending(false);
     if (profileError) {
       setError(profileError.code === "23505" ? "That username is already taken. Try another one." : profileError.message);
@@ -457,6 +528,7 @@ export function WardrobeApp() {
       fullName: data.full_name,
       username: data.username,
       sizingPreference: data.sizing_preference as SizingPreference,
+      preferredCurrency: normalizeCurrency(data.preferred_currency),
       onboardingCompleted: true,
     });
     setSizeProfile(data.size_profile as SizeProfile);
@@ -634,6 +706,7 @@ export function WardrobeApp() {
     const existing = products.find((product) => product.canonicalUrl === draft.canonicalUrl || product.url === draft.url);
     const product: SavedProduct = {
       ...draft,
+      currency: normalizeCurrency(draft.currency),
       id: existing?.id ?? crypto.randomUUID(),
       collection: existing?.collection ?? "saved",
       purchasedAt: existing?.purchasedAt ?? null,
@@ -844,6 +917,7 @@ export function WardrobeApp() {
           <div className="product-grid">
             {visibleProducts.map((product, index) => {
               const availability = availabilityForProduct(product, sizeProfile);
+              const price = productPrice(product, preferredCurrency, exchangeRates, exchangeRateTarget);
               return (
               <article className={`product-pill tone-${index % 4} ${product.category === "Shoes" ? "shoe-pill" : ""}`} key={product.id} style={{ "--delay": `${index * 55}ms` } as CSSProperties}>
                 <a className="pill-hit-area" href={product.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${product.title} at ${product.retailer} in a new tab`} />
@@ -854,7 +928,10 @@ export function WardrobeApp() {
                     <span>{product.category}</span>
                   </div>
                   <h3>{product.title}</h3>
-                  <p className="price">{formatMoney(product.priceCents, product.currency)}</p>
+                  <div className="price-block">
+                    <p className="price">{price.primary}</p>
+                    {price.secondary && <small>{price.secondary}</small>}
+                  </div>
                   <div className="pill-tags">
                     <span className={`stock-tag ${availability.status}`}>{availability.label}</span>
                     {product.selectedColor && <span className="soft-tag">{product.selectedColor}</span>}
@@ -904,6 +981,13 @@ export function WardrobeApp() {
                   <span><strong>{products.filter((product) => product.collection === "saved").length}</strong> saved</span>
                   <span><strong>{products.filter((product) => product.collection === "closet").length}</strong> in closet</span>
                 </div>
+                <label className="account-currency">
+                  <span>Display prices in</span>
+                  <select value={preferredCurrency} onChange={(event) => void savePreferredCurrency(event.target.value)} disabled={currencyPending}>
+                    {displayCurrencies.map((currency) => <option value={currency.code} key={currency.code}>{currency.code} — {currency.label}</option>)}
+                  </select>
+                  <small>Retailer prices stay saved in their original currency.</small>
+                </label>
                 <div className="account-actions">
                   <button className="secondary-button" type="button" onClick={openAccountProfile}>Edit profile</button>
                   <button className="secondary-button" type="button" onClick={signOut}>Log out</button>
@@ -963,6 +1047,13 @@ export function WardrobeApp() {
                     <strong>Women’s sizing</strong><span>Use women’s bottoms and shoe ranges</span>
                   </button>
                 </div>
+                <label className="onboarding-currency">
+                  <span>Main display currency</span>
+                  <select value={onboardingCurrency} onChange={(event) => setOnboardingCurrency(event.target.value)}>
+                    {displayCurrencies.map((currency) => <option value={currency.code} key={currency.code}>{currency.code} — {currency.label}</option>)}
+                  </select>
+                  <small>Foreign prices will be converted into this currency on your saved pieces.</small>
+                </label>
               </div>
             )}
 
@@ -1045,8 +1136,8 @@ export function WardrobeApp() {
                       <label>Brand<input value={draft.brand} onChange={(event) => setDraft({ ...draft, brand: event.target.value })} /></label>
                     </div>
                     <div className="field-row three">
-                      <label>Price<input type="number" min="0" step="0.01" value={draft.priceCents === null ? "" : draft.priceCents / 100} onChange={(event) => setDraft({ ...draft, priceCents: event.target.value ? Math.round(Number(event.target.value) * 100) : null })} /></label>
-                      <label>Currency<input maxLength={3} value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value.toUpperCase() })} /></label>
+                      <label>Original price<input type="number" min="0" step="0.01" value={draft.priceCents === null ? "" : draft.priceCents / 100} onChange={(event) => setDraft({ ...draft, priceCents: event.target.value ? Math.round(Number(event.target.value) * 100) : null })} /></label>
+                      <label>Retailer currency<input maxLength={3} minLength={3} required pattern="[A-Za-z]{3}" title="Use a three-letter currency code, such as CNY or JPY" value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value.toUpperCase().replace(/[^A-Z]/g, "") })} placeholder="CNY" /></label>
                       <label>Category<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })}>{categories.slice(1).map((category) => <option key={category}>{category}</option>)}</select></label>
                     </div>
                     <label>Image URL<input type="url" value={draft.imageUrl} onChange={(event) => setDraft({ ...draft, imageUrl: event.target.value })} placeholder="https://…" /></label>
