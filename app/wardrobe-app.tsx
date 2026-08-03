@@ -5,6 +5,7 @@ import Image, { type ImageLoaderProps } from "next/image";
 import type { User } from "@supabase/supabase-js";
 import { convertCurrencyCents, displayCurrencies, normalizeCurrency } from "../lib/currency";
 import { productFromRow, productToRow, type ProductRow } from "../lib/product-storage";
+import { mergeProductRefresh, salePercentage } from "../lib/product-refresh";
 import {
   defaultSizeProfile,
   emptySizeProfile,
@@ -42,6 +43,7 @@ const samples: SavedProduct[] = [
     retailer: "Uniqlo",
     imageUrl: "https://images.unsplash.com/photo-1576566588028-4147f3842f27?auto=format&fit=crop&w=900&q=85",
     priceCents: 4990,
+    originalPriceCents: null,
     currency: "USD",
     category: "Tops",
     selectedSize: "S",
@@ -62,6 +64,7 @@ const samples: SavedProduct[] = [
     retailer: "COS",
     imageUrl: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?auto=format&fit=crop&w=900&q=85",
     priceCents: 13500,
+    originalPriceCents: null,
     currency: "USD",
     category: "Outerwear",
     selectedSize: "S",
@@ -82,6 +85,7 @@ const samples: SavedProduct[] = [
     retailer: "New Balance",
     imageUrl: "https://images.unsplash.com/photo-1549298916-b41d501d3772?auto=format&fit=crop&w=900&q=85",
     priceCents: 11999,
+    originalPriceCents: null,
     currency: "USD",
     category: "Shoes",
     selectedSize: "US 9",
@@ -103,6 +107,7 @@ const emptyDraft = (url = ""): ProductDraft => ({
   retailer: retailerFromUrl(url),
   imageUrl: "",
   priceCents: null,
+  originalPriceCents: null,
   currency: "USD",
   category: "Other",
   selectedSize: "",
@@ -130,18 +135,18 @@ function formatMoney(cents: number | null, currency: string) {
   }
 }
 
-function productPrice(product: SavedProduct, preferredCurrency: string, rates: Record<string, number>, rateTarget: string) {
+function productPrice(product: SavedProduct, preferredCurrency: string, rates: Record<string, number>, rateTarget: string, amount = product.priceCents) {
   const originalCurrency = normalizeCurrency(product.currency);
   const displayCurrency = normalizeCurrency(preferredCurrency);
-  const original = formatMoney(product.priceCents, originalCurrency);
-  if (product.priceCents === null || originalCurrency === displayCurrency) {
-    return { primary: original, secondary: "" };
+  const retailerPrice = formatMoney(amount, originalCurrency);
+  if (amount === null || originalCurrency === displayCurrency) {
+    return { primary: retailerPrice, secondary: "" };
   }
   const rate = rateTarget === displayCurrency ? rates[originalCurrency] : undefined;
-  if (!rate) return { primary: original, secondary: "" };
+  if (!rate) return { primary: retailerPrice, secondary: "" };
   return {
-    primary: `${formatMoney(convertCurrencyCents(product.priceCents, rate), displayCurrency)} ${displayCurrency}`,
-    secondary: `${original} ${originalCurrency} original`,
+    primary: `${formatMoney(convertCurrencyCents(amount, rate), displayCurrency)} ${displayCurrency}`,
+    secondary: `${retailerPrice} ${originalCurrency} original`,
   };
 }
 
@@ -322,6 +327,7 @@ export function WardrobeApp() {
           const localProducts = JSON.parse(saved) as Array<Partial<SavedProduct> & ProductDraft & { id: string; checkedAt: string; createdAt: string }>;
           setProducts(localProducts.map((product) => ({
             ...product,
+            originalPriceCents: product.originalPriceCents ?? null,
             collection: product.collection ?? "saved",
             purchasedAt: product.purchasedAt ?? null,
           })) as SavedProduct[]);
@@ -697,6 +703,9 @@ export function WardrobeApp() {
       ...draft,
       url: matchingSize?.url || color.url || withVariant(draft.url, matchingSize?.variantId ?? color.variantId),
       imageUrl: color.imageUrl || draft.imageUrl,
+      priceCents: color.priceCents ?? draft.priceCents,
+      originalPriceCents: color.originalPriceCents ?? draft.originalPriceCents,
+      currency: color.currency || draft.currency,
       selectedColor: color.label,
       sizes: color.sizes,
       selectedSize: matchingSize?.label ?? "",
@@ -716,6 +725,7 @@ export function WardrobeApp() {
       ?? products.find((product) => product.canonicalUrl === draft.canonicalUrl || product.url === draft.url);
     const product: SavedProduct = {
       ...draft,
+      originalPriceCents: draft.originalPriceCents ?? existing?.originalPriceCents ?? null,
       currency: normalizeCurrency(draft.currency),
       id: existing?.id ?? crypto.randomUUID(),
       collection: existing?.collection ?? "saved",
@@ -794,21 +804,8 @@ export function WardrobeApp() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Availability could not be checked.");
       const fresh = data.product as ProductDraft;
-      const size = fresh.sizes.find((option) => option.label.toLowerCase() === product.selectedSize.toLowerCase());
-      const updated: SavedProduct = {
-        ...product,
-        title: fresh.title || product.title,
-        brand: fresh.brand || product.brand,
-        retailer: fresh.retailer || product.retailer,
-        imageUrl: fresh.imageUrl || product.imageUrl,
-        priceCents: fresh.priceCents ?? product.priceCents,
-        currency: fresh.currency || product.currency,
-        selectedColor: fresh.selectedColor || product.selectedColor,
-        colors: fresh.colors ?? product.colors,
-        sizes: fresh.sizes,
-        status: size?.status ?? fresh.status,
-        checkedAt: new Date().toISOString(),
-      };
+      const refresh = mergeProductRefresh(product, fresh);
+      const updated = refresh.product;
       if (supabase && user) {
         const { error: updateError } = await supabase.from("products").update(productToRow(updated, user.id)).eq("id", product.id).eq("user_id", user.id);
         if (updateError) throw updateError;
@@ -816,7 +813,7 @@ export function WardrobeApp() {
       } else {
         commitLocalProducts(products.map((item) => item.id === product.id ? updated : item));
       }
-      setNotice(`Checked ${product.title}.`);
+      setNotice(refresh.priceDropped ? `${product.title} dropped in price — it is now on sale.` : `Checked ${product.title}.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Availability could not be checked.");
     } finally {
@@ -943,6 +940,10 @@ export function WardrobeApp() {
             {visibleProducts.map((product, index) => {
               const availability = availabilityForProduct(product, sizeProfile);
               const price = productPrice(product, preferredCurrency, exchangeRates, exchangeRateTarget);
+              const discount = salePercentage(product.priceCents, product.originalPriceCents);
+              const originalPrice = discount
+                ? productPrice(product, preferredCurrency, exchangeRates, exchangeRateTarget, product.originalPriceCents)
+                : null;
               return (
               <article className={`product-pill tone-${index % 4}`} key={product.id} style={{ "--delay": `${index * 55}ms` } as CSSProperties}>
                 <a className="pill-hit-area" href={product.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${product.title} at ${product.retailer} in a new tab`} />
@@ -954,7 +955,8 @@ export function WardrobeApp() {
                   </div>
                   <h3>{product.title}</h3>
                   <div className="price-block">
-                    <p className="price">{price.primary}</p>
+                    {originalPrice && <p className="old-price"><s>{originalPrice.primary}</s></p>}
+                    <div className="current-price-row"><p className={`price ${discount ? "sale-price" : ""}`}>{price.primary}</p>{discount > 0 && <span className="sale-badge">{discount}% off</span>}</div>
                     {price.secondary && <small>{price.secondary}</small>}
                   </div>
                   <div className="pill-tags">
@@ -1162,8 +1164,11 @@ export function WardrobeApp() {
                       <label>Retailer<input value={draft.retailer} onChange={(event) => setDraft({ ...draft, retailer: event.target.value })} required /></label>
                       <label>Brand<input value={draft.brand} onChange={(event) => setDraft({ ...draft, brand: event.target.value })} /></label>
                     </div>
-                    <div className="field-row three">
-                      <label>Original price<input type="number" min="0" step="0.01" value={draft.priceCents === null ? "" : draft.priceCents / 100} onChange={(event) => setDraft({ ...draft, priceCents: event.target.value ? Math.round(Number(event.target.value) * 100) : null })} /></label>
+                    <div className="field-row">
+                      <label>Current price<input type="number" min="0" step="0.01" value={draft.priceCents === null ? "" : draft.priceCents / 100} onChange={(event) => setDraft({ ...draft, priceCents: event.target.value ? Math.round(Number(event.target.value) * 100) : null })} /></label>
+                      <label>Regular price <span>(if on sale)</span><input type="number" min="0" step="0.01" value={draft.originalPriceCents == null ? "" : draft.originalPriceCents / 100} onChange={(event) => setDraft({ ...draft, originalPriceCents: event.target.value ? Math.round(Number(event.target.value) * 100) : null })} /></label>
+                    </div>
+                    <div className="field-row">
                       <label>Retailer currency<input maxLength={3} minLength={3} required pattern="[A-Za-z]{3}" title="Use a three-letter currency code, such as CNY or JPY" value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value.toUpperCase().replace(/[^A-Z]/g, "") })} placeholder="CNY" /></label>
                       <label>Category<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })}>{categories.slice(1).map((category) => <option key={category}>{category}</option>)}</select></label>
                     </div>

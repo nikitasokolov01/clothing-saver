@@ -357,7 +357,7 @@ test("uses a Shopify variant link for the selected color, image, and per-color s
     variants: [
       { id: 1, option1: "Black Wash", option2: "Small", available: false, price: 6400, featured_image: { src: "https://image.example/black.jpg" } },
       { id: 2, option1: "Black Wash", option2: "Medium", available: true, price: 6400, featured_image: { src: "https://image.example/black.jpg" } },
-      { id: 45456468148412, option1: "Heather Grey", option2: "Small", available: true, price: 6400, featured_image: { src: "https://image.example/grey.jpg" } },
+      { id: 45456468148412, option1: "Heather Grey", option2: "Small", available: true, price: 6400, compare_at_price: 8000, featured_image: { src: "https://image.example/grey.jpg" } },
       { id: 4, option1: "Heather Grey", option2: "Medium", available: false, price: 6400, featured_image: { src: "https://image.example/grey.jpg" } },
     ],
   }, sourceUrl);
@@ -366,6 +366,7 @@ test("uses a Shopify variant link for the selected color, image, and per-color s
   assert.equal(result.selectedColor, "Heather Grey");
   assert.equal(result.imageUrl, "https://image.example/grey.jpg");
   assert.equal(result.priceCents, 6400);
+  assert.equal(result.originalPriceCents, 8000);
   assert.equal(result.category, "Bottoms");
   assert.deepEqual(result.sizes, [
     { label: "Small", status: "in-stock", variantId: "45456468148412" },
@@ -385,11 +386,11 @@ test("reads Foot Locker shoe category, colors, sizes, and availability from hydr
         model: { attributes: { categories: ["Shoes"], styles: ["Casual Sneakers"] } },
         style: { sku: "W2288111", color: "White/White" },
         sizes: [
-          { id: "white-6", sku: "W2288111", color: "White/White", size: "06.0", active: true, inventory: inventory(true), price: { salePrice: 115 } },
+          { id: "white-6", sku: "W2288111", color: "White/White", size: "06.0", active: true, inventory: inventory(true), price: { salePrice: 115, listPrice: 130 } },
           { id: "white-65", sku: "W2288111", color: "White/White", size: "06.5", active: false, inventory: inventory(false), price: { salePrice: 115 } },
         ],
         styleVariants: [
-          { id: "white-6", sku: "W2288111", color: "White/White", size: "06.0", active: true, inventory: inventory(true), price: { salePrice: 115 } },
+          { id: "white-6", sku: "W2288111", color: "White/White", size: "06.0", active: true, inventory: inventory(true), price: { salePrice: 115, listPrice: 130 } },
           { id: "white-65", sku: "W2288111", color: "White/White", size: "06.5", active: false, inventory: inventory(false), price: { salePrice: 115 } },
           { id: "black-6", sku: "2288001M", color: "Black/Black", size: "06.0", active: true, inventory: inventory(true), price: { salePrice: 115 } },
         ],
@@ -406,6 +407,7 @@ test("reads Foot Locker shoe category, colors, sizes, and availability from hydr
   assert.equal(result.category, "Shoes");
   assert.equal(result.selectedColor, "White/White");
   assert.equal(result.priceCents, 11500);
+  assert.equal(result.originalPriceCents, 13000);
   assert.deepEqual(result.sizes.map(({ label, status }) => ({ label, status })), [
     { label: "US 6", status: "in-stock" },
     { label: "US 6.5", status: "out-of-stock" },

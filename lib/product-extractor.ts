@@ -199,6 +199,7 @@ type NormalizedVariant = {
   imageUrl: string;
   url: string;
   priceCents: number | null;
+  originalPriceCents?: number | null;
   currency: string;
 };
 
@@ -262,6 +263,9 @@ function buildVariantMatrix(rows: NormalizedVariant[], preferredColor = "", sele
       label,
       imageUrl: matching.map((row) => row.imageUrl).find(Boolean) ?? "",
       sizes: sizeOptions(matching),
+      priceCents: matching.map((row) => row.priceCents).find((price) => price !== null) ?? null,
+      originalPriceCents: matching.map((row) => row.originalPriceCents).find((price) => price !== null && price !== undefined) ?? null,
+      currency: matching.map((row) => row.currency).find(Boolean) ?? "",
       ...(variantId ? { variantId } : {}),
       ...(url ? { url } : {}),
     };
@@ -275,6 +279,7 @@ function buildVariantMatrix(rows: NormalizedVariant[], preferredColor = "", sele
     sizes: selectedColorOption?.sizes ?? sizeOptions(rows),
     imageUrl: selected.imageUrl || selectedColorOption?.imageUrl || "",
     priceCents: selected.priceCents,
+    originalPriceCents: selected.originalPriceCents ?? null,
     currency: selected.currency,
   };
 }
@@ -333,7 +338,10 @@ function extractFootLockerVariantMatrix(html: string, sourceUrl: string) {
   const variants = asRecords(product.styleVariants).length ? asRecords(product.styleVariants) : asRecords(product.sizes);
   const rows = variants.map((variant): NormalizedVariant => {
     const sku = textValue(variant.sku ?? variant.styleDocumentId).replace(/_fl_enus$/i, "") || selectedSku;
-    const price = Number(asRecord(variant.price).salePrice ?? asRecord(variant.price).listPrice);
+    const priceDetails = asRecord(variant.price);
+    const salePrice = Number(priceDetails.salePrice);
+    const listPrice = Number(priceDetails.listPrice);
+    const price = Number.isFinite(salePrice) && salePrice > 0 ? salePrice : listPrice;
     const productUrl = sku ? new URL(`/product/~/${sku}.html`, sourceUrl).toString() : sourceUrl;
     return {
       id: textValue(variant.productNumber ?? variant.upc ?? variant.id),
@@ -343,6 +351,7 @@ function extractFootLockerVariantMatrix(html: string, sourceUrl: string) {
       imageUrl: sku ? `https://assets.footlocker.com/is/image/FLDM/${sku}_01` : "",
       url: productUrl,
       priceCents: Number.isFinite(price) && price > 0 ? Math.round(price * 100) : null,
+      originalPriceCents: Number.isFinite(listPrice) && listPrice > price ? Math.round(listPrice * 100) : null,
       currency: "USD",
     };
   }).filter((row) => row.size);
@@ -482,6 +491,7 @@ function extractWooCommerceVariantMatrix(html: string, sourceUrl: string) {
       const inStock = variation.is_in_stock;
       const status: StockStatus = inStock === true ? "in-stock" : inStock === false ? "out-of-stock" : "unknown";
       const amount = Number(variation.display_price ?? variation.price);
+      const regularAmount = Number(variation.display_regular_price ?? variation.regular_price);
       return {
         id,
         color: colorKey ? humanizeOption(textValue(attributes[colorKey])) : "",
@@ -490,6 +500,7 @@ function extractWooCommerceVariantMatrix(html: string, sourceUrl: string) {
         imageUrl: textValue(asRecord(variation.image).src ?? asRecord(variation.image).url),
         url: rowUrl.toString(),
         priceCents: Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) : null,
+        originalPriceCents: Number.isFinite(regularAmount) && regularAmount > amount ? Math.round(regularAmount * 100) : null,
         currency: "",
       };
     });
@@ -589,6 +600,7 @@ function extractWeidianProduct(html: string, sourceUrl: string): ProductDraft | 
       ?? "";
     const stock = Number(sku.stock);
     const price = Number(sku.price ?? sku.origin_price);
+    const originalPrice = Number(sku.origin_price);
     return {
       id: textValue(sku.id),
       color,
@@ -597,6 +609,7 @@ function extractWeidianProduct(html: string, sourceUrl: string): ProductDraft | 
       imageUrl: textValue(sku.img) || selectedAttributes.map((attribute) => attribute.imageUrl).find(Boolean) || itemImage,
       url: sourceUrl,
       priceCents: Number.isFinite(price) && price > 0 ? Math.round(price * 100) : null,
+      originalPriceCents: Number.isFinite(originalPrice) && originalPrice > price ? Math.round(originalPrice * 100) : null,
       currency: "CNY",
     };
   });
@@ -707,6 +720,7 @@ function extractGuProduct(html: string, sourceUrl: string) {
   const promo = asRecord(prices.promo);
   const base = asRecord(prices.base);
   const price = Number(promo.value ?? base.value);
+  const originalPrice = Number(base.value);
   const currency = textValue(asRecord(promo.currency).code ?? asRecord(base.currency).code) || "USD";
   const selectedColorCode = parsedUrl.searchParams.get("colorDisplayCode") ?? "";
   const colors = asRecords(product.colors);
@@ -731,6 +745,7 @@ function extractGuProduct(html: string, sourceUrl: string) {
     brand: "GU",
     imageUrl: textValue(selectedImage.image),
     priceCents: Number.isFinite(price) && price > 0 ? Math.round(price * 100) : null,
+    originalPriceCents: Number.isFinite(originalPrice) && originalPrice > price ? Math.round(originalPrice * 100) : null,
     currency,
     categoryText: `${textValue(product.name)} ${breadcrumbs}`,
     selectedColor: textValue(selectedColor.name),
@@ -1038,6 +1053,10 @@ export function enrichShopifyProductWithVariants(
           label,
           imageUrl: matchingVariants.map(shopifyVariantImage).find(Boolean) ?? "",
           sizes: [...sizesByLabel.entries()].map(([sizeLabel, details]) => ({ label: sizeLabel, ...details })),
+          priceCents: Number.isFinite(Number(matchingVariants[0]?.price)) ? Math.round(Number(matchingVariants[0]?.price)) : null,
+          originalPriceCents: Number(matchingVariants[0]?.compare_at_price) > Number(matchingVariants[0]?.price)
+            ? Math.round(Number(matchingVariants[0]?.compare_at_price))
+            : null,
           variantId: textValue(matchingVariants[0]?.id),
         };
       })
@@ -1050,6 +1069,7 @@ export function enrichShopifyProductWithVariants(
       ])).entries()].filter(([label]) => label).map(([label, status]) => ({ label, status }))
     : product.sizes);
   const variantPrice = Number(selectedVariant.price);
+  const compareAtPrice = Number(selectedVariant.compare_at_price);
 
   return {
     ...product,
@@ -1058,6 +1078,7 @@ export function enrichShopifyProductWithVariants(
     retailer: textValue(payload.vendor) || product.retailer,
     imageUrl: shopifyVariantImage(selectedVariant) || selectedColorOption?.imageUrl || product.imageUrl,
     priceCents: Number.isFinite(variantPrice) && variantPrice > 0 ? Math.round(variantPrice) : product.priceCents,
+    originalPriceCents: Number.isFinite(compareAtPrice) && compareAtPrice > variantPrice ? Math.round(compareAtPrice) : product.originalPriceCents,
     category: guessCategory(`${textValue(payload.title)} ${textValue(payload.type)} ${product.category}`),
     selectedColor: selectedColor || product.selectedColor,
     sizes,
@@ -1114,6 +1135,7 @@ export function parseProductHtml(html: string, sourceUrl: string): ProductDraft 
   const structuredPrice = Number(textValue(offer.price ?? offer.lowPrice ?? variantOffer.price ?? variantOffer.lowPrice).replace(/[^0-9.,-]/g, "").replace(",", "."));
   const variantPrice = Number(textValue(variantOffer.price ?? variantOffer.lowPrice).replace(/[^0-9.,-]/g, "").replace(",", "."));
   const metaPrice = Number(readMeta(html, "product:price:amount").replace(/[^0-9.,-]/g, "").replace(",", "."));
+  const metaOriginalPrice = Number((readMeta(html, "product:original_price:amount") || readMeta(html, "product:price:standard_amount")).replace(/[^0-9.,-]/g, "").replace(",", "."));
   const parsedPrice = Number.isFinite(structuredPrice) && structuredPrice > 0
     ? structuredPrice
     : Number.isFinite(variantPrice) && variantPrice > 0
@@ -1139,6 +1161,10 @@ export function parseProductHtml(html: string, sourceUrl: string): ProductDraft 
     retailer: brand || retailerFromUrl(canonicalUrl),
     imageUrl: guProduct?.imageUrl || variantMatrix?.imageUrl || firstImage(product.image) || readMeta(html, "og:image"),
     priceCents: variantMatrix?.priceCents ?? parsedPriceCents ?? guProduct?.priceCents ?? null,
+    originalPriceCents: variantMatrix?.originalPriceCents
+      ?? (Number.isFinite(metaOriginalPrice) && metaOriginalPrice > parsedPrice ? Math.round(metaOriginalPrice * 100) : null)
+      ?? guProduct?.originalPriceCents
+      ?? null,
     currency: variantMatrix?.currency || textValue(offer.priceCurrency ?? variantOffer.priceCurrency) || readMeta(html, "product:price:currency") || guProduct?.currency || "USD",
     category: guessCategory(`${title} ${textValue(product.category)} ${guProduct?.categoryText ?? ""} ${footLockerProduct?.categoryText ?? ""}`),
     selectedSize: "",

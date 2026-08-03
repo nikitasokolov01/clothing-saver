@@ -93,6 +93,10 @@ img { display: block; width: 100%; }
 .product-copy h3 { margin: 25px 0 7px; font-size: clamp(21px, 2.2vw, 29px); line-height: 1.05; letter-spacing: -.045em; font-weight: 620; }
 .price-block { display: grid; gap: 3px; }
 .price { margin: 0; font-size: 14px; color: rgba(37,37,34,.68); }
+.current-price-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.old-price { margin: 0; color: rgba(37,37,34,.43); font-size: 11px; }
+.sale-price { color: #a43f2b; font-weight: 720; }
+.sale-badge { border-radius: 999px; background: #a43f2b; padding: 5px 7px; color: white; font-size: 8px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
 .price-block small { color: rgba(37,37,34,.48); font-size: 9px; }
 .pill-tags { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 22px; }
 .pill-tags span { padding: 8px 10px; border-radius: 999px; font-size: 9px; line-height: 1; font-weight: 680; }
@@ -303,6 +307,7 @@ footer { min-height: 90px; display: flex; align-items: center; justify-content: 
 .notification-row { display: grid; grid-template-columns: auto 1fr auto auto; gap: 15px; align-items: center; position: relative; border: 1px solid var(--line); border-radius: 22px; background: rgba(255,255,255,.55); padding: 16px; }
 .notification-row.unread { background: var(--surface); box-shadow: 0 9px 25px rgba(50,45,36,.05); }
 .notification-avatar { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 50%; background: var(--ink); color: white; text-decoration: none; font-size: 12px; font-weight: 700; }
+.notification-avatar.sale { background: #a43f2b; }
 .notification-copy p { margin: 0 0 4px; font-size: 12px; }
 .notification-copy small { color: var(--muted); font-size: 9px; }
 .notification-actions { display: flex; gap: 7px; }

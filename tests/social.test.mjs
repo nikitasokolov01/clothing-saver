@@ -4,6 +4,7 @@ import {
   followActionLabel,
   notificationActor,
   notificationMessage,
+  notificationProduct,
 } from "../lib/social.ts";
 
 test("labels public and private follow states clearly", () => {
@@ -17,6 +18,13 @@ test("describes every social notification type", () => {
   assert.equal(notificationMessage("follow_request", "Nikita"), "Nikita requested to follow you.");
   assert.equal(notificationMessage("follow_accepted", "Nikita"), "Nikita accepted your follow request.");
   assert.equal(notificationMessage("new_follower", "Nikita"), "Nikita followed you.");
+  assert.equal(notificationMessage("price_drop", "", "Boston clogs"), "Boston clogs just dropped in price.");
+});
+
+test("normalizes nested notification products", () => {
+  const product = { id: "p1", title: "Boston clogs" };
+  assert.equal(notificationProduct({ product: [product] }), product);
+  assert.equal(notificationProduct({ product }), product);
 });
 
 test("normalizes nested notification actors", () => {

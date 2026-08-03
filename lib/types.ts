@@ -12,6 +12,9 @@ export type ColorOption = {
   label: string;
   imageUrl: string;
   sizes: SizeOption[];
+  priceCents?: number | null;
+  originalPriceCents?: number | null;
+  currency?: string;
   variantId?: string;
   url?: string;
 };
@@ -24,6 +27,7 @@ export type ProductDraft = {
   retailer: string;
   imageUrl: string;
   priceCents: number | null;
+  originalPriceCents?: number | null;
   currency: string;
   category: string;
   selectedSize: string;
@@ -35,6 +39,7 @@ export type ProductDraft = {
 
 export type SavedProduct = ProductDraft & {
   id: string;
+  originalPriceCents: number | null;
   collection: ProductCollection;
   purchasedAt: string | null;
   checkedAt: string;

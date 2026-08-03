@@ -10,6 +10,7 @@ export type ProductRow = {
   retailer: string;
   image_url: string;
   price_cents: number | null;
+  original_price_cents: number | null;
   currency: string;
   category: string;
   selected_size: string;
@@ -34,6 +35,7 @@ export function productFromRow(row: ProductRow): SavedProduct {
     retailer: row.retailer,
     imageUrl: row.image_url,
     priceCents: row.price_cents,
+    originalPriceCents: row.original_price_cents,
     currency: row.currency,
     category: row.category,
     selectedSize: row.selected_size,
@@ -59,6 +61,7 @@ export function productToRow(product: SavedProduct, userId: string) {
     retailer: product.retailer,
     image_url: product.imageUrl,
     price_cents: product.priceCents,
+    original_price_cents: product.originalPriceCents,
     currency: product.currency,
     category: product.category,
     selected_size: product.selectedSize,
