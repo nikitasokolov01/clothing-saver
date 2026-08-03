@@ -413,6 +413,12 @@ export function WardrobeApp() {
     setProfileDraft({ ...profileDraft, [category]: next });
   }
 
+  function chooseProfileSizing(preference: SizingPreference) {
+    if (preference === profileSizing) return;
+    setProfileSizing(preference);
+    setProfileDraft((current) => ({ ...current, Bottoms: [], Shoes: [] }));
+  }
+
   async function saveSizeProfile() {
     setSizeProfile(profileDraft);
     if (supabase && user) {
@@ -1199,15 +1205,21 @@ export function WardrobeApp() {
               <h2 id="profile-title">My sizes</h2>
               <p>Select every size that usually works for you. Products will automatically show whether any of those sizes are available.</p>
             </div>
-            <div className="sizing-choice compact" aria-label="Sizing preference">
-              <button type="button" className={profileSizing === "mens" ? "selected" : ""} onClick={() => setProfileSizing("mens")}>Men’s sizing</button>
-              <button type="button" className={profileSizing === "womens" ? "selected" : ""} onClick={() => setProfileSizing("womens")}>Women’s sizing</button>
+            <div className="profile-sizing-switch">
+              <div>
+                <strong>Sizing system</strong>
+                <small>Controls your bottoms and US shoe size options.</small>
+              </div>
+              <div className="sizing-choice compact" aria-label="Sizing system">
+                <button type="button" className={profileSizing === "mens" ? "selected" : ""} aria-pressed={profileSizing === "mens"} onClick={() => chooseProfileSizing("mens")}>Men</button>
+                <button type="button" className={profileSizing === "womens" ? "selected" : ""} aria-pressed={profileSizing === "womens"} onClick={() => chooseProfileSizing("womens")}>Women</button>
+              </div>
             </div>
             <div className="profile-groups">
               {sizeGroupsFor(profileSizing).map((group) => (
                 <div className="profile-group" key={group.category}>
                   <div>
-                    <strong>{group.category}</strong>
+                    <strong>{group.category}{group.category === "Shoes" && <span className="size-system-badge">{profileSizing === "mens" ? "Men’s US" : "Women’s US"}</span>}</strong>
                     <small>{profileDraft[group.category]?.length ? profileDraft[group.category].join(" · ") : "No sizes selected"}</small>
                   </div>
                   <div className="profile-options">

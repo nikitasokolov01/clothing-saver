@@ -195,10 +195,16 @@ footer { min-height: 90px; display: flex; align-items: center; justify-content: 
 .account-currency select:focus, .onboarding-currency select:focus { border-color: var(--ink); box-shadow: 0 0 0 3px rgba(37,37,34,.06); }
 .account-currency small, .onboarding-currency small { color: var(--muted); font-size: 9px; font-weight: 450; }
 .account-actions { display: flex; gap: 8px; }
+.profile-sizing-switch { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 10px; padding: 14px 16px; border-radius: 18px; background: #eeece5; }
+.profile-sizing-switch > div:first-child { display: grid; gap: 3px; }
+.profile-sizing-switch strong { font-size: 12px; }
+.profile-sizing-switch small { color: var(--muted); font-size: 9px; }
+.profile-sizing-switch .sizing-choice.compact { margin: 0; }
 .profile-groups { display: grid; gap: 10px; }
 .profile-group { display: grid; grid-template-columns: 130px 1fr; gap: 20px; align-items: center; padding: 15px 0; border-bottom: 1px solid var(--line); }
 .profile-group > div:first-child { display: grid; gap: 4px; }
 .profile-group strong { font-size: 13px; }
+.size-system-badge { display: inline-block; margin-left: 7px; border-radius: 999px; background: #eeece5; padding: 4px 6px; color: var(--muted); font-size: 7px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; vertical-align: 1px; }
 .profile-group small { color: var(--muted); font-size: 9px; }
 .profile-options { display: flex; flex-wrap: wrap; gap: 7px; }
 .profile-options button { min-width: 43px; border: 1px solid var(--line); border-radius: 999px; background: #fff; padding: 9px 11px; cursor: pointer; font-size: 10px; }
@@ -284,5 +290,6 @@ footer { min-height: 90px; display: flex; align-items: center; justify-content: 
   .variant-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
   .dialog { padding: 28px 20px 22px; border-radius: 25px; }
   .profile-group { grid-template-columns: 1fr; gap: 10px; }
+  .profile-sizing-switch { align-items: flex-start; flex-direction: column; }
   footer { align-items: flex-start; flex-direction: column; justify-content: center; gap: 4px; }
 }

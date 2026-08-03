@@ -17,6 +17,12 @@ export const defaultSizeProfile: SizeProfile = {
 };
 
 const letterSizes = ["XS", "S", "M", "L", "XL", "2XL", "3XL"];
+const shoeSizes = (start: number, end: number) => Array.from(
+  { length: (end - start) * 2 + 1 },
+  (_, index) => `US ${start + index / 2}`,
+);
+const mensShoeSizes = shoeSizes(6, 13);
+const womensShoeSizes = shoeSizes(5, 12);
 
 export function sizeGroupsFor(preference: SizingPreference) {
   return [
@@ -30,9 +36,7 @@ export function sizeGroupsFor(preference: SizingPreference) {
     },
     {
       category: "Shoes",
-      options: preference === "mens"
-        ? ["US 6", "US 7", "US 8", "US 9", "US 10", "US 11", "US 12", "US 13"]
-        : ["US 5", "US 6", "US 7", "US 8", "US 9", "US 10", "US 11", "US 12"],
+      options: preference === "mens" ? mensShoeSizes : womensShoeSizes,
     },
     { category: "Underwear", options: letterSizes },
   ];

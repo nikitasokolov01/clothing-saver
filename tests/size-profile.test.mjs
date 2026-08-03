@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { preferredSizeForProduct } from "../lib/size-profile.ts";
+import { preferredSizeForProduct, sizeGroupsFor } from "../lib/size-profile.ts";
 
 const product = (sizes, category = "Tops") => ({ category, sizes });
 
@@ -38,4 +38,14 @@ test("matches a preferred half size inside the correct gendered retail range", (
   ], "Shoes"), { Shoes: ["US 6.5"] }, "mens");
 
   assert.equal(selected?.label, "Men's US 6-6.5");
+});
+
+test("offers half-size increments for men's and women's shoe profiles", () => {
+  const mensShoes = sizeGroupsFor("mens").find((group) => group.category === "Shoes")?.options;
+  const womensShoes = sizeGroupsFor("womens").find((group) => group.category === "Shoes")?.options;
+
+  assert.deepEqual(mensShoes?.slice(0, 4), ["US 6", "US 6.5", "US 7", "US 7.5"]);
+  assert.deepEqual(mensShoes?.slice(-3), ["US 12", "US 12.5", "US 13"]);
+  assert.deepEqual(womensShoes?.slice(0, 4), ["US 5", "US 5.5", "US 6", "US 6.5"]);
+  assert.deepEqual(womensShoes?.slice(-3), ["US 11", "US 11.5", "US 12"]);
 });
