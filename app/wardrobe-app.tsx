@@ -811,7 +811,7 @@ export function WardrobeApp() {
             {visibleProducts.map((product, index) => {
               const availability = availabilityForProduct(product, sizeProfile);
               return (
-              <article className={`product-pill tone-${index % 4}`} key={product.id} style={{ "--delay": `${index * 55}ms` } as CSSProperties}>
+              <article className={`product-pill tone-${index % 4} ${product.category === "Shoes" ? "shoe-pill" : ""}`} key={product.id} style={{ "--delay": `${index * 55}ms` } as CSSProperties}>
                 <a className="pill-hit-area" href={product.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${product.title} at ${product.retailer} in a new tab`} />
                 <div className="product-photo"><ProductImage product={product} /></div>
                 <div className="product-copy">
@@ -910,8 +910,8 @@ export function WardrobeApp() {
                 <h2 id="onboarding-title">First, what should we call you?</h2>
                 <p>Your name appears in the app. Your username gives you a quicker way to log in later.</p>
                 <div className="onboarding-fields">
-                  <label>Your name<input autoComplete="name" value={onboardingName} onChange={(event) => setOnboardingName(event.target.value)} placeholder="Nikita" autoFocus /></label>
-                  <label>Username<div className="username-input"><span>@</span><input autoComplete="username" value={onboardingUsername} onChange={(event) => setOnboardingUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))} placeholder="nikita" /></div><small>3–24 characters. Letters, numbers and underscores only.</small></label>
+                  <label>Your name<input autoComplete="name" value={onboardingName} onChange={(event) => setOnboardingName(event.target.value)} placeholder="firstname" autoFocus /></label>
+                  <label>Username<div className="username-input"><span>@</span><input autoComplete="username" value={onboardingUsername} onChange={(event) => setOnboardingUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))} placeholder="username" /></div><small>3–24 characters. Letters, numbers and underscores only.</small></label>
                 </div>
               </div>
             )}
@@ -1002,7 +1002,7 @@ export function WardrobeApp() {
                 )}
 
                 <div className="review-layout">
-                  <div className="preview-image">{draft.imageUrl ? <Image loader={sourceImageLoader} src={draft.imageUrl} alt="Product preview" fill sizes="220px" unoptimized /> : <span>Product image</span>}</div>
+                  <div className={`preview-image ${draft.category === "Shoes" ? "shoe-preview" : ""}`}>{draft.imageUrl ? <Image loader={sourceImageLoader} src={draft.imageUrl} alt="Product preview" fill sizes="220px" unoptimized /> : <span>Product image</span>}</div>
                   <div className="form-fields">
                     <label>Product link<input type="url" value={draft.url} onChange={(event) => setDraft({ ...draft, url: event.target.value, canonicalUrl: event.target.value })} placeholder="https://…" required /></label>
                     <label>Product name<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} required /></label>

@@ -276,6 +276,45 @@ test("uses a Shopify variant link for the selected color, image, and per-color s
   ]);
 });
 
+test("reads Foot Locker shoe category, colors, sizes, and availability from hydration data", () => {
+  const inventory = (available) => ({ inventoryAvailable: available });
+  const hydration = {
+    loaderData: {
+      product: {
+        model: { attributes: { categories: ["Shoes"], styles: ["Casual Sneakers"] } },
+        style: { sku: "W2288111", color: "White/White" },
+        sizes: [
+          { id: "white-6", sku: "W2288111", color: "White/White", size: "06.0", active: true, inventory: inventory(true), price: { salePrice: 115 } },
+          { id: "white-65", sku: "W2288111", color: "White/White", size: "06.5", active: false, inventory: inventory(false), price: { salePrice: 115 } },
+        ],
+        styleVariants: [
+          { id: "white-6", sku: "W2288111", color: "White/White", size: "06.0", active: true, inventory: inventory(true), price: { salePrice: 115 } },
+          { id: "white-65", sku: "W2288111", color: "White/White", size: "06.5", active: false, inventory: inventory(false), price: { salePrice: 115 } },
+          { id: "black-6", sku: "2288001M", color: "Black/Black", size: "06.0", active: true, inventory: inventory(true), price: { salePrice: 115 } },
+        ],
+      },
+    },
+  };
+  const html = [
+    `<meta property="og:title" content="Nike Air Force 1 '07 - Men's">`,
+    `<script>window.__staticRouterHydrationData = JSON.parse(${JSON.stringify(JSON.stringify(hydration))})</script>`,
+  ].join("");
+
+  const result = parseProductHtml(html, "https://www.footlocker.com/product/~/W2288111.html");
+
+  assert.equal(result.category, "Shoes");
+  assert.equal(result.selectedColor, "White/White");
+  assert.equal(result.priceCents, 11500);
+  assert.deepEqual(result.sizes.map(({ label, status }) => ({ label, status })), [
+    { label: "US 6", status: "in-stock" },
+    { label: "US 6.5", status: "out-of-stock" },
+  ]);
+  assert.deepEqual(result.colors?.map((color) => ({ label: color.label, sizes: color.sizes.length })), [
+    { label: "White/White", sizes: 2 },
+    { label: "Black/Black", sizes: 1 },
+  ]);
+});
+
 test("round trips an account product between the app and Supabase row shape", () => {
   const row = {
     id: "2a0328db-6090-42b5-98ee-ad52f14a8f91",

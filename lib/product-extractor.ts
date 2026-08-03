@@ -3,7 +3,7 @@ import type { ProductDraft, SizeOption, StockStatus } from "./types";
 type JsonRecord = Record<string, unknown>;
 
 const CATEGORY_RULES: Array<[string, RegExp]> = [
-  ["Shoes", /\b(shoe|sneaker|boot|loafer|heel|sandal|trainer)\b/i],
+  ["Shoes", /\b(shoe|sneaker|boot|loafer|heel|sandal|trainer)s?\b/i],
   ["Bottoms", /\b(jean|trouser|pant|short|skirt|legging|chino|slack|sweatpant|sweat)s?\b/i],
   ["Accessories", /\b(bag|belt|hat|cap|scarf|jewelry|watch|wallet|sunglass)\b/i],
   ["Underwear", /\b(underwear|brief|boxer|bra|bralette|lingerie|sock)\b/i],
@@ -251,6 +251,81 @@ function buildVariantMatrix(rows: NormalizedVariant[], preferredColor = "", sele
     imageUrl: selected.imageUrl || selectedColorOption?.imageUrl || "",
     priceCents: selected.priceCents,
     currency: selected.currency,
+  };
+}
+
+function footLockerSizeLabel(value: unknown) {
+  const raw = textValue(value).replace(/^0+(?=\d)/, "");
+  if (!raw) return "";
+  const numeric = Number(raw);
+  return `US ${Number.isFinite(numeric) ? numeric : raw}`;
+}
+
+function footLockerStockStatus(record: JsonRecord): StockStatus {
+  const inventory = asRecord(record.inventory);
+  if (record.active === false || inventory.inventoryAvailable === false) return "out-of-stock";
+  if (inventory.inventoryAvailable === true) return "in-stock";
+  return "unknown";
+}
+
+function extractFootLockerVariantMatrix(html: string, sourceUrl: string) {
+  let host = "";
+  let sourceSku = "";
+  try {
+    const parsed = new URL(sourceUrl);
+    host = parsed.hostname.toLowerCase();
+    sourceSku = parsed.pathname.match(/\/([^/]+)\.html$/i)?.[1] ?? "";
+  } catch {
+    return null;
+  }
+  if (!host.endsWith("footlocker.com")) return null;
+
+  const hydrationMatch = html.match(/window\.__staticRouterHydrationData\s*=\s*JSON\.parse\(("(?:\\.|[^"\\])*")\)/);
+  if (!hydrationMatch) return null;
+
+  let hydration: unknown;
+  try {
+    hydration = JSON.parse(JSON.parse(hydrationMatch[1]));
+  } catch {
+    return null;
+  }
+
+  const candidates: JsonRecord[] = [];
+  const stack: unknown[] = [hydration];
+  while (stack.length) {
+    const value = stack.pop();
+    if (!value || typeof value !== "object") continue;
+    if (!Array.isArray(value) && Array.isArray((value as JsonRecord).sizes) && asRecords((value as JsonRecord).sizes).some((size) => textValue(size.size))) {
+      candidates.push(value as JsonRecord);
+    }
+    stack.push(...(Array.isArray(value) ? value : Object.values(value as JsonRecord)));
+  }
+
+  const product = candidates.find((candidate) => textValue(asRecord(candidate.style).sku).toLowerCase() === sourceSku.toLowerCase()) ?? candidates[0];
+  if (!product) return null;
+  const style = asRecord(product.style);
+  const selectedSku = textValue(style.sku) || sourceSku;
+  const variants = asRecords(product.styleVariants).length ? asRecords(product.styleVariants) : asRecords(product.sizes);
+  const rows = variants.map((variant): NormalizedVariant => {
+    const sku = textValue(variant.sku ?? variant.styleDocumentId).replace(/_fl_enus$/i, "") || selectedSku;
+    const price = Number(asRecord(variant.price).salePrice ?? asRecord(variant.price).listPrice);
+    const productUrl = sku ? new URL(`/product/~/${sku}.html`, sourceUrl).toString() : sourceUrl;
+    return {
+      id: textValue(variant.productNumber ?? variant.upc ?? variant.id),
+      color: textValue(variant.color) || textValue(style.color),
+      size: footLockerSizeLabel(variant.size ?? variant.strippedSize),
+      status: footLockerStockStatus(variant),
+      imageUrl: sku ? `https://assets.footlocker.com/is/image/FLDM/${sku}_01` : "",
+      url: productUrl,
+      priceCents: Number.isFinite(price) && price > 0 ? Math.round(price * 100) : null,
+      currency: "USD",
+    };
+  }).filter((row) => row.size);
+  if (!rows.length) return null;
+  const selectedRow = rows.find((row) => row.url.toLowerCase().includes(`/${selectedSku.toLowerCase()}.html`));
+  return {
+    matrix: buildVariantMatrix(rows, textValue(style.color), selectedRow),
+    categoryText: JSON.stringify(product.model ?? {}),
   };
 }
 
@@ -752,7 +827,8 @@ export function parseProductHtml(html: string, sourceUrl: string): ProductDraft 
     ?? objects.find((item) => hasType(item["@type"], "ProductGroup"))
     ?? objects.find((item) => hasType(item["@type"], "Product"))
     ?? {};
-  const variantMatrix = extractWooCommerceVariantMatrix(html, sourceUrl) ?? extractStructuredVariantMatrix(product, sourceUrl);
+  const footLockerProduct = extractFootLockerVariantMatrix(html, sourceUrl);
+  const variantMatrix = footLockerProduct?.matrix ?? extractWooCommerceVariantMatrix(html, sourceUrl) ?? extractStructuredVariantMatrix(product, sourceUrl);
   const offer = getOffer(product);
   const variantOffer = asRecords(product.hasVariant)
     .map(getOffer)
@@ -790,7 +866,7 @@ export function parseProductHtml(html: string, sourceUrl: string): ProductDraft 
     imageUrl: guProduct?.imageUrl || variantMatrix?.imageUrl || firstImage(product.image) || readMeta(html, "og:image"),
     priceCents: variantMatrix?.priceCents ?? parsedPriceCents ?? guProduct?.priceCents ?? null,
     currency: variantMatrix?.currency || textValue(offer.priceCurrency ?? variantOffer.priceCurrency) || readMeta(html, "product:price:currency") || guProduct?.currency || "USD",
-    category: guessCategory(`${title} ${textValue(product.category)} ${guProduct?.categoryText ?? ""}`),
+    category: guessCategory(`${title} ${textValue(product.category)} ${guProduct?.categoryText ?? ""} ${footLockerProduct?.categoryText ?? ""}`),
     selectedSize: "",
     selectedColor: variantMatrix?.selectedColor || selectedColorFromControls(html) || textValue(product.color) || guProduct?.selectedColor || "",
     status: sizes.length ? "unknown" : availabilityStatus(offer.availability ?? product.availability),
