@@ -214,6 +214,7 @@ export function WardrobeApp() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [stage, setStage] = useState<"idle" | "importing" | "review" | "saving">("idle");
   const [draft, setDraft] = useState<ProductDraft>(emptyDraft());
+  const [editingId, setEditingId] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [refreshingId, setRefreshingId] = useState("");
@@ -703,7 +704,8 @@ export function WardrobeApp() {
     }
     setStage("saving");
     const now = new Date().toISOString();
-    const existing = products.find((product) => product.canonicalUrl === draft.canonicalUrl || product.url === draft.url);
+    const existing = products.find((product) => product.id === editingId)
+      ?? products.find((product) => product.canonicalUrl === draft.canonicalUrl || product.url === draft.url);
     const product: SavedProduct = {
       ...draft,
       currency: normalizeCurrency(draft.currency),
@@ -714,20 +716,23 @@ export function WardrobeApp() {
       createdAt: existing?.createdAt ?? now,
     };
     if (supabase && user) {
-      const { data, error: saveError } = await supabase
-        .from("products")
-        .upsert(productToRow(product, user.id), { onConflict: "user_id,canonical_url" })
-        .select()
-        .single();
+      const productRow = productToRow(product, user.id);
+      const { data, error: saveError } = editingId
+        ? await supabase.from("products").update(productRow).eq("id", editingId).eq("user_id", user.id).select().single()
+        : await supabase.from("products").upsert(productRow, { onConflict: "user_id,canonical_url" }).select().single();
       if (saveError) {
         setError(saveError.message);
         setStage("review");
         return;
       }
       const saved = productFromRow(data as ProductRow);
-      setProducts([saved, ...products.filter((item) => item.id !== saved.id && item.canonicalUrl !== saved.canonicalUrl)]);
+      setProducts(editingId
+        ? products.map((item) => item.id === editingId ? saved : item)
+        : [saved, ...products.filter((item) => item.id !== saved.id && item.canonicalUrl !== saved.canonicalUrl)]);
     } else {
-      commitLocalProducts([product, ...products.filter((item) => item.id !== product.id)]);
+      commitLocalProducts(editingId
+        ? products.map((item) => item.id === editingId ? product : item)
+        : [product, ...products.filter((item) => item.id !== product.id)]);
     }
     setUrl("");
     closeDialog();
@@ -824,10 +829,20 @@ export function WardrobeApp() {
     setStage("review");
   }
 
+  function editProduct(product: SavedProduct) {
+    setEditingId(product.id);
+    setDraft({ ...product });
+    setError("");
+    setNotice("");
+    setDialogOpen(true);
+    setStage("review");
+  }
+
   function closeDialog() {
     setDialogOpen(false);
     setStage("idle");
     setDraft(emptyDraft());
+    setEditingId("");
     setError("");
     setNotice("");
     setColorLoading("");
@@ -941,6 +956,7 @@ export function WardrobeApp() {
                       <span className={refreshingId === product.id ? "spinning" : ""}>↻</span> {refreshingId === product.id ? "Checking" : `Checked ${timeAgo(product.checkedAt)}`}
                     </button>
                     <div className="card-actions">
+                      {collection === "saved" && <button className="edit-button" type="button" onClick={() => editProduct(product)}>Edit</button>}
                       <button className="closet-button" type="button" onClick={() => moveProduct(product, collection === "saved" ? "closet" : "saved")}>
                         {collection === "saved" ? "Mark bought" : "Move to saved"}
                       </button>
@@ -1103,9 +1119,9 @@ export function WardrobeApp() {
             ) : (
               <form onSubmit={saveDraft}>
                 <div className="dialog-header">
-                  <p className="kicker">Quick review</p>
-                  <h2 id="dialog-title">Does this look right?</h2>
-                  <p>Correct anything the retailer page did not make clear.</p>
+                  <p className="kicker">{editingId ? "Edit saved piece" : "Quick review"}</p>
+                  <h2 id="dialog-title">{editingId ? "Update the details." : "Does this look right?"}</h2>
+                  <p>{editingId ? "Change anything you want to keep with this piece." : "Correct anything the retailer page did not make clear."}</p>
                 </div>
                 {notice && <div className="form-message success">{notice}</div>}
                 {error && <div className="form-message error">{error}</div>}
@@ -1166,7 +1182,7 @@ export function WardrobeApp() {
 
                 <div className="dialog-actions">
                   <button type="button" className="secondary-button" onClick={closeDialog}>Cancel</button>
-                  <button type="submit" className="primary-button" disabled={stage === "saving"}>{stage === "saving" ? "Saving…" : "Save item"}</button>
+                  <button type="submit" className="primary-button" disabled={stage === "saving"}>{stage === "saving" ? "Saving…" : editingId ? "Save changes" : "Save item"}</button>
                 </div>
               </form>
             )}

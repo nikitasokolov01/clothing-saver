@@ -108,6 +108,7 @@ img { display: block; width: 100%; }
 .card-meta button:hover { color: var(--ink); }
 .card-meta button:disabled { cursor: wait; }
 .card-actions { display: flex; align-items: center; gap: 8px; }
+.card-meta .edit-button { border-radius: 999px; border: 1px solid rgba(37,37,34,.14); padding: 7px 10px; color: var(--ink); font-weight: 650; }
 .card-meta .closet-button { border-radius: 999px; background: rgba(255,255,255,.62); padding: 7px 9px; color: var(--ink); text-decoration: none; font-weight: 650; }
 .remove-button { text-decoration: underline; text-underline-offset: 3px; }
 .open-arrow { position: absolute; z-index: 0; right: 20px; top: 20px; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: rgba(255,255,255,.57); font-size: 14px; transition: transform .2s; }
