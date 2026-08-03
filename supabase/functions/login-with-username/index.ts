@@ -1,6 +1,15 @@
 import { createClient } from "npm:@supabase/supabase-js@2.111.0";
 
-const allowedOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
+const allowedOrigins = new Set([
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "https://clothing-saver.vercel.app",
+]);
+
+function isAllowedOrigin(origin: string) {
+  return allowedOrigins.has(origin)
+    || /^https:\/\/clothing-saver(?:-[a-z0-9-]+)?\.vercel\.app$/.test(origin);
+}
 const corsHeaders = (origin: string) => ({
   "Access-Control-Allow-Origin": origin,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -21,7 +30,7 @@ async function hashAttemptKey(value: string) {
 
 Deno.serve(async (request) => {
   const origin = request.headers.get("origin") || "";
-  if (!allowedOrigins.has(origin)) return new Response("Forbidden", { status: 403 });
+  if (!isAllowedOrigin(origin)) return new Response("Forbidden", { status: 403 });
   const headers = { ...corsHeaders(origin), "Content-Type": "application/json" };
   if (request.method === "OPTIONS") return new Response("ok", { headers });
   if (request.method !== "POST") {
