@@ -243,7 +243,7 @@ export function WardrobeApp() {
       const initialize = async () => {
         const { data, error: authError } = await supabase.auth.getUser();
         if (!active) return;
-        if (authError) setError(authError.message);
+        if (authError && authError.name !== "AuthSessionMissingError") setError(authError.message);
         setUser(data.user);
         if (data.user) await loadAccount(data.user);
         else {
