@@ -4,6 +4,15 @@ import { FormEvent, useEffect, useMemo, useState, type CSSProperties } from "rea
 import Image, { type ImageLoaderProps } from "next/image";
 import type { User } from "@supabase/supabase-js";
 import { productFromRow, productToRow, type ProductRow } from "../lib/product-storage";
+import {
+  defaultSizeProfile,
+  emptySizeProfile,
+  normalizeSize,
+  preferredSizeForProduct,
+  sizeGroupsFor,
+  type SizeProfile,
+  type SizingPreference,
+} from "../lib/size-profile";
 import { createClient, isSupabaseConfigured } from "../lib/supabase/client";
 import type { ProductDraft, SavedProduct, StockStatus } from "../lib/types";
 
@@ -12,22 +21,12 @@ const storageKey = "clothing-saver:products:v1";
 const sizeProfileKey = "clothing-saver:size-profile:v1";
 const sourceImageLoader = ({ src }: ImageLoaderProps) => src;
 
-type SizeProfile = Record<string, string[]>;
-
-const sizeGroups: Array<{ category: string; options: string[] }> = [
-  { category: "Tops", options: ["XS", "S", "M", "L", "XL", "2XL", "3XL"] },
-  { category: "Outerwear", options: ["XS", "S", "M", "L", "XL", "2XL", "3XL"] },
-  { category: "Bottoms", options: ["26", "28", "30", "32", "34", "36", "38", "40"] },
-  { category: "Shoes", options: ["US 6", "US 7", "US 8", "US 9", "US 10", "US 11", "US 12", "US 13"] },
-  { category: "Underwear", options: ["XS", "S", "M", "L", "XL", "2XL", "3XL"] },
-];
-
-const defaultSizeProfile: SizeProfile = {
-  Tops: ["S", "M"],
-  Outerwear: [],
-  Bottoms: [],
-  Shoes: [],
-  Underwear: [],
+type AccountProfile = {
+  userId: string;
+  fullName: string;
+  username: string;
+  sizingPreference: SizingPreference;
+  onboardingCompleted: boolean;
 };
 
 const samples: SavedProduct[] = [
@@ -141,20 +140,6 @@ function statusCopy(status: StockStatus, size: string) {
   return size ? `Size ${size} not verified` : "Availability unknown";
 }
 
-function normalizeSize(size: string) {
-  const compact = size.trim().toUpperCase().replace(/[._-]/g, " ").replace(/\s+/g, " ");
-  const aliases: Record<string, string> = {
-    "X SMALL": "XS",
-    "EXTRA SMALL": "XS",
-    SMALL: "S",
-    MEDIUM: "M",
-    LARGE: "L",
-    "X LARGE": "XL",
-    "EXTRA LARGE": "XL",
-  };
-  return aliases[compact] ?? compact;
-}
-
 function withVariant(url: string, variantId?: string) {
   if (!variantId) return url;
   try {
@@ -215,11 +200,20 @@ export function WardrobeApp() {
   const [refreshingId, setRefreshingId] = useState("");
   const [sizeProfile, setSizeProfile] = useState<SizeProfile>(defaultSizeProfile);
   const [profileDraft, setProfileDraft] = useState<SizeProfile>(defaultSizeProfile);
+  const [profileSizing, setProfileSizing] = useState<SizingPreference>("mens");
   const [profileOpen, setProfileOpen] = useState(false);
+  const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(1);
+  const [onboardingName, setOnboardingName] = useState("");
+  const [onboardingUsername, setOnboardingUsername] = useState("");
+  const [onboardingSizing, setOnboardingSizing] = useState<SizingPreference>("mens");
+  const [onboardingSizes, setOnboardingSizes] = useState<SizeProfile>(emptySizeProfile);
+  const [onboardingPending, setOnboardingPending] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
-  const [authEmail, setAuthEmail] = useState("");
+  const [authIdentifier, setAuthIdentifier] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authPending, setAuthPending] = useState(false);
   const supabase = useMemo(() => isSupabaseConfigured ? createClient() : null, []);
@@ -231,13 +225,36 @@ export function WardrobeApp() {
         setLoading(true);
         const [productsResult, profileResult] = await Promise.all([
           supabase.from("products").select("*").order("created_at", { ascending: false }),
-          supabase.from("profiles").select("size_profile").eq("user_id", account.id).maybeSingle(),
+          supabase.from("profiles").select("full_name,username,sizing_preference,onboarding_completed,size_profile").eq("user_id", account.id).maybeSingle(),
         ]);
         if (!active) return;
         if (productsResult.error) setError(productsResult.error.message);
         else setProducts((productsResult.data as ProductRow[]).map(productFromRow));
         if (profileResult.error) setError(profileResult.error.message);
-        else if (profileResult.data?.size_profile) setSizeProfile(profileResult.data.size_profile as SizeProfile);
+        else {
+          const row = profileResult.data;
+          const savedSizes = row?.size_profile ? row.size_profile as SizeProfile : emptySizeProfile;
+          const sizing = row?.sizing_preference === "womens" ? "womens" : "mens";
+          const profile = row ? {
+            userId: account.id,
+            fullName: row.full_name || "",
+            username: row.username || "",
+            sizingPreference: sizing,
+            onboardingCompleted: Boolean(row.onboarding_completed),
+          } satisfies AccountProfile : null;
+          setSizeProfile(savedSizes);
+          setAccountProfile(profile);
+          if (!profile?.onboardingCompleted) {
+            setOnboardingName(profile?.fullName || "");
+            setOnboardingUsername(profile?.username || "");
+            setOnboardingSizing(sizing);
+            setOnboardingSizes(savedSizes);
+            setOnboardingStep(1);
+            setOnboardingOpen(true);
+          } else {
+            setOnboardingOpen(false);
+          }
+        }
         setLoading(false);
       };
       const initialize = async () => {
@@ -248,6 +265,8 @@ export function WardrobeApp() {
         if (data.user) await loadAccount(data.user);
         else {
           setProducts([]);
+          setAccountProfile(null);
+          setOnboardingOpen(false);
           setLoading(false);
         }
       };
@@ -258,6 +277,8 @@ export function WardrobeApp() {
         if (session?.user) window.setTimeout(() => void loadAccount(session.user), 0);
         else {
           setProducts([]);
+          setAccountProfile(null);
+          setOnboardingOpen(false);
           setLoading(false);
         }
       });
@@ -326,6 +347,7 @@ export function WardrobeApp() {
       return;
     }
     setProfileDraft(Object.fromEntries(Object.entries(sizeProfile).map(([category, sizes]) => [category, [...sizes]])));
+    setProfileSizing(accountProfile?.sizingPreference ?? "mens");
     setProfileOpen(true);
   }
 
@@ -341,12 +363,14 @@ export function WardrobeApp() {
       const { error: profileError } = await supabase.from("profiles").upsert({
         user_id: user.id,
         size_profile: profileDraft,
+        sizing_preference: profileSizing,
         updated_at: new Date().toISOString(),
       });
       if (profileError) {
         setError(profileError.message);
         return;
       }
+      setAccountProfile((current) => current ? { ...current, sizingPreference: profileSizing } : current);
       setNotice("Your size profile was saved to your account.");
     } else try {
       window.localStorage.setItem(sizeProfileKey, JSON.stringify(profileDraft));
@@ -357,14 +381,112 @@ export function WardrobeApp() {
     setProfileOpen(false);
   }
 
+  function openAccountProfile() {
+    setAuthOpen(false);
+    setOnboardingName(accountProfile?.fullName || "");
+    setOnboardingUsername(accountProfile?.username || "");
+    setOnboardingSizing(accountProfile?.sizingPreference ?? "mens");
+    setOnboardingSizes(Object.fromEntries(Object.entries(sizeProfile).map(([category, sizes]) => [category, [...sizes]])));
+    setOnboardingStep(1);
+    setOnboardingOpen(true);
+  }
+
+  function toggleOnboardingSize(category: string, size: string) {
+    const current = onboardingSizes[category] ?? [];
+    const next = current.includes(size) ? current.filter((item) => item !== size) : [...current, size];
+    setOnboardingSizes({ ...onboardingSizes, [category]: next });
+  }
+
+  function continueOnboarding() {
+    setError("");
+    if (onboardingStep === 1) {
+      if (!onboardingName.trim()) {
+        setError("Please add your name.");
+        return;
+      }
+      if (!/^[a-zA-Z0-9_]{3,24}$/.test(onboardingUsername.trim())) {
+        setError("Usernames must be 3–24 characters and use only letters, numbers, or underscores.");
+        return;
+      }
+    }
+    setOnboardingStep((step) => Math.min(3, step + 1));
+  }
+
+  function chooseOnboardingSizing(preference: SizingPreference) {
+    setOnboardingSizing(preference);
+    setOnboardingSizes((current) => ({ ...current, Bottoms: [], Shoes: [] }));
+  }
+
+  async function finishOnboarding() {
+    if (!supabase || !user) return;
+    const fullName = onboardingName.trim();
+    const username = onboardingUsername.trim().toLowerCase();
+    if (!fullName) {
+      setError("Please add your name.");
+      setOnboardingStep(1);
+      return;
+    }
+    if (!/^[a-z0-9_]{3,24}$/.test(username)) {
+      setError("Usernames must be 3–24 characters and use only lowercase letters, numbers, or underscores.");
+      setOnboardingStep(1);
+      return;
+    }
+    setOnboardingPending(true);
+    setError("");
+    const { data, error: profileError } = await supabase.from("profiles").upsert({
+      user_id: user.id,
+      full_name: fullName,
+      username,
+      sizing_preference: onboardingSizing,
+      size_profile: onboardingSizes,
+      onboarding_completed: true,
+      updated_at: new Date().toISOString(),
+    }).select("full_name,username,sizing_preference,onboarding_completed,size_profile").single();
+    setOnboardingPending(false);
+    if (profileError) {
+      setError(profileError.code === "23505" ? "That username is already taken. Try another one." : profileError.message);
+      if (profileError.code === "23505") setOnboardingStep(1);
+      return;
+    }
+    setAccountProfile({
+      userId: user.id,
+      fullName: data.full_name,
+      username: data.username,
+      sizingPreference: data.sizing_preference as SizingPreference,
+      onboardingCompleted: true,
+    });
+    setSizeProfile(data.size_profile as SizeProfile);
+    setOnboardingOpen(false);
+    setNotice(accountProfile?.onboardingCompleted ? "Your profile was updated." : "You’re all set. Welcome to Saved.");
+  }
+
   async function submitAuth(event: FormEvent) {
     event.preventDefault();
     if (!supabase) return;
     setAuthPending(true);
     setError("");
-    const result = authMode === "login"
-      ? await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword })
-      : await supabase.auth.signUp({ email: authEmail, password: authPassword });
+    const identifier = authIdentifier.trim();
+    if (authMode === "signup" && !identifier.includes("@")) {
+      setAuthPending(false);
+      setError("Use your email address to create an account.");
+      return;
+    }
+    let result;
+    if (authMode === "login" && !identifier.includes("@")) {
+      const { data, error: functionError } = await supabase.functions.invoke("login-with-username", {
+        body: { username: identifier.toLowerCase(), password: authPassword },
+      });
+      if (functionError || !data?.access_token || !data?.refresh_token) {
+        setAuthPending(false);
+        setError("Invalid username or password.");
+        return;
+      }
+      result = await supabase.auth.setSession({ access_token: data.access_token, refresh_token: data.refresh_token });
+    } else {
+      result = authMode === "login"
+        ? await supabase.auth.signInWithPassword({ email: identifier, password: authPassword })
+        : await supabase.auth.signUp({ email: identifier, password: authPassword });
+    }
     setAuthPending(false);
     if (result.error) {
       setError(result.error.message);
@@ -414,16 +536,23 @@ export function WardrobeApp() {
         setError(data.error || "This retailer's page could not be read.");
       } else {
         const product = data.product as ProductDraft;
-        if (product.sizes.length === 1) {
-          product.selectedSize = product.sizes[0].label;
-          product.status = product.sizes[0].status;
+        const preferredSize = preferredSizeForProduct(product, sizeProfile, accountProfile?.sizingPreference ?? "mens");
+        const autoSelected = preferredSize ?? (product.sizes.length === 1 ? product.sizes[0] : undefined);
+        if (autoSelected) {
+          product.selectedSize = autoSelected.label;
+          product.status = autoSelected.status;
+          product.url = autoSelected.url || withVariant(product.url, autoSelected.variantId);
         }
         setDraft(product);
         const preferred = new Set((sizeProfile[product.category] ?? []).map(normalizeSize));
         const availableMatches = product.sizes
           .filter((size) => preferred.has(normalizeSize(size.label)) && size.status === "in-stock")
           .map((size) => size.label);
-        setNotice(availableMatches.length
+        setNotice(preferredSize
+          ? preferredSize.status === "in-stock"
+            ? `Good news - size ${preferredSize.label} is available and was selected for you.`
+            : `Size ${preferredSize.label} matches your profile and was selected for tracking.`
+          : availableMatches.length
           ? `Good news — ${availableMatches.join(" and ")} are available in your sizes.`
           : product.sizes.length
             ? "Details and sizes found. You can track one size or use your size profile."
@@ -608,8 +737,8 @@ export function WardrobeApp() {
           <button className="profile-button" type="button" onClick={openSizeProfile}>My sizes</button>
           {supabase ? (
             <button className="account-button" type="button" onClick={() => setAuthOpen(true)}>
-              <span className="account-avatar">{user?.email?.slice(0, 1).toUpperCase() || "?"}</span>
-              <span>{user?.email || "Log in"}</span>
+              <span className="account-avatar">{accountProfile?.fullName.slice(0, 1).toUpperCase() || user?.email?.slice(0, 1).toUpperCase() || "?"}</span>
+              <span>{accountProfile?.fullName || accountProfile?.username || (user ? "My account" : "Log in")}</span>
             </button>
           ) : <div className="local-badge"><span /> Local preview</div>}
         </div>
@@ -723,7 +852,7 @@ export function WardrobeApp() {
       </section>
 
       <footer>
-        <span>{supabase ? user ? `Synced to ${user.email}` : "Log in to sync your collection" : "Local preview mode"}</span>
+        <span>{supabase ? user ? `Synced as ${accountProfile?.username ? `@${accountProfile.username}` : user.email}` : "Log in to sync your collection" : "Local preview mode"}</span>
         <span>{supabase ? "Protected per account with Supabase" : "Add Supabase keys to enable accounts"}</span>
       </footer>
 
@@ -733,15 +862,18 @@ export function WardrobeApp() {
             <button className="dialog-close" type="button" onClick={() => setAuthOpen(false)} disabled={authPending} aria-label="Close account dialog">×</button>
             {user ? (
               <div className="account-panel">
-                <span className="account-large-avatar">{user.email?.slice(0, 1).toUpperCase()}</span>
+                <span className="account-large-avatar">{accountProfile?.fullName.slice(0, 1).toUpperCase() || user.email?.slice(0, 1).toUpperCase()}</span>
                 <p className="kicker">Your account</p>
-                <h2 id="auth-title">You’re logged in.</h2>
-                <p>{user.email}</p>
+                <h2 id="auth-title">{accountProfile?.fullName || "You’re logged in."}</h2>
+                <p>{accountProfile?.username ? `@${accountProfile.username} · ${user.email}` : user.email}</p>
                 <div className="account-stats">
                   <span><strong>{products.filter((product) => product.collection === "saved").length}</strong> saved</span>
                   <span><strong>{products.filter((product) => product.collection === "closet").length}</strong> in closet</span>
                 </div>
-                <button className="secondary-button" type="button" onClick={signOut}>Log out</button>
+                <div className="account-actions">
+                  <button className="secondary-button" type="button" onClick={openAccountProfile}>Edit profile</button>
+                  <button className="secondary-button" type="button" onClick={signOut}>Log out</button>
+                </div>
               </div>
             ) : (
               <form className="auth-form" onSubmit={submitAuth}>
@@ -750,7 +882,7 @@ export function WardrobeApp() {
                 <p>Your saved pieces, sizes and closet will follow you between devices.</p>
                 {notice && <div className="form-message success">{notice}</div>}
                 {error && <div className="form-message error">{error}</div>}
-                <label>Email<input type="email" autoComplete="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} required /></label>
+                <label>{authMode === "login" ? "Email or username" : "Email"}<input type={authMode === "login" ? "text" : "email"} autoComplete={authMode === "login" ? "username" : "email"} value={authIdentifier} onChange={(event) => setAuthIdentifier(event.target.value)} required /></label>
                 <label>Password<input type="password" minLength={6} autoComplete={authMode === "login" ? "current-password" : "new-password"} value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} required /></label>
                 <button className="primary-button" type="submit" disabled={authPending}>{authPending ? "Please wait…" : authMode === "login" ? "Log in" : "Create account"}</button>
                 <button className="auth-switch" type="button" onClick={() => setAuthMode(authMode === "login" ? "signup" : "login")}>
@@ -758,6 +890,76 @@ export function WardrobeApp() {
                 </button>
               </form>
             )}
+          </section>
+        </div>
+      )}
+
+      {onboardingOpen && user && (
+        <div className="dialog-backdrop onboarding-backdrop">
+          <section className="dialog onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+            {accountProfile?.onboardingCompleted && (
+              <button className="dialog-close" type="button" onClick={() => setOnboardingOpen(false)} disabled={onboardingPending} aria-label="Close profile editor">×</button>
+            )}
+            <div className="onboarding-progress" aria-label={`Step ${onboardingStep} of 3`}>
+              {[1, 2, 3].map((step) => <span className={step <= onboardingStep ? "active" : ""} key={step} />)}
+            </div>
+
+            {onboardingStep === 1 && (
+              <div className="onboarding-step">
+                <p className="kicker">Let’s get started</p>
+                <h2 id="onboarding-title">First, what should we call you?</h2>
+                <p>Your name appears in the app. Your username gives you a quicker way to log in later.</p>
+                <div className="onboarding-fields">
+                  <label>Your name<input autoComplete="name" value={onboardingName} onChange={(event) => setOnboardingName(event.target.value)} placeholder="Nikita" autoFocus /></label>
+                  <label>Username<div className="username-input"><span>@</span><input autoComplete="username" value={onboardingUsername} onChange={(event) => setOnboardingUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))} placeholder="nikita" /></div><small>3–24 characters. Letters, numbers and underscores only.</small></label>
+                </div>
+              </div>
+            )}
+
+            {onboardingStep === 2 && (
+              <div className="onboarding-step">
+                <p className="kicker">Your fit</p>
+                <h2 id="onboarding-title">Which sizing do you usually shop?</h2>
+                <p>We’ll use this preference when a retailer lists men’s and women’s variants separately.</p>
+                <div className="sizing-choice">
+                  <button type="button" className={onboardingSizing === "mens" ? "selected" : ""} onClick={() => chooseOnboardingSizing("mens")}>
+                    <strong>Men’s sizing</strong><span>Use men’s bottoms and shoe ranges</span>
+                  </button>
+                  <button type="button" className={onboardingSizing === "womens" ? "selected" : ""} onClick={() => chooseOnboardingSizing("womens")}>
+                    <strong>Women’s sizing</strong><span>Use women’s bottoms and shoe ranges</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {onboardingStep === 3 && (
+              <div className="onboarding-step sizes-step">
+                <p className="kicker">Your defaults</p>
+                <h2 id="onboarding-title">What sizes usually fit?</h2>
+                <p>Select more than one if your fit changes between brands. We’ll automatically pick an available match when you import a product.</p>
+                <div className="profile-groups">
+                  {sizeGroupsFor(onboardingSizing).map((group) => (
+                    <div className="profile-group" key={group.category}>
+                      <div><strong>{group.category}</strong><small>{onboardingSizes[group.category]?.length ? onboardingSizes[group.category].join(" · ") : "Optional"}</small></div>
+                      <div className="profile-options">
+                        {group.options.map((size) => {
+                          const selected = onboardingSizes[group.category]?.includes(size);
+                          return <button type="button" key={size} className={selected ? "selected" : ""} aria-pressed={selected} onClick={() => toggleOnboardingSize(group.category, size)}>{size}</button>;
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {error && <div className="form-message error">{error}</div>}
+            <div className="dialog-actions onboarding-actions">
+              {onboardingStep > 1 && <button type="button" className="secondary-button" onClick={() => { setError(""); setOnboardingStep((step) => step - 1); }} disabled={onboardingPending}>Back</button>}
+              {onboardingStep < 3
+                ? <button type="button" className="primary-button" onClick={continueOnboarding}>Continue</button>
+                : <button type="button" className="primary-button" onClick={finishOnboarding} disabled={onboardingPending}>{onboardingPending ? "Saving…" : "Finish setup"}</button>}
+            </div>
           </section>
         </div>
       )}
@@ -856,8 +1058,12 @@ export function WardrobeApp() {
               <h2 id="profile-title">My sizes</h2>
               <p>Select every size that usually works for you. Products will automatically show whether any of those sizes are available.</p>
             </div>
+            <div className="sizing-choice compact" aria-label="Sizing preference">
+              <button type="button" className={profileSizing === "mens" ? "selected" : ""} onClick={() => setProfileSizing("mens")}>Men’s sizing</button>
+              <button type="button" className={profileSizing === "womens" ? "selected" : ""} onClick={() => setProfileSizing("womens")}>Women’s sizing</button>
+            </div>
             <div className="profile-groups">
-              {sizeGroups.map((group) => (
+              {sizeGroupsFor(profileSizing).map((group) => (
                 <div className="profile-group" key={group.category}>
                   <div>
                     <strong>{group.category}</strong>
