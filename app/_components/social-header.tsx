@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "../../lib/supabase/client";
 
-export function SocialHeader() {
+export function SocialNavigation() {
   const pathname = usePathname();
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -32,28 +32,34 @@ export function SocialHeader() {
   }, []);
 
   return (
+    <nav className="social-nav" aria-label="Social navigation">
+      <Link className={pathname === "/feed" ? "active" : ""} href="/feed" aria-current={pathname === "/feed" ? "page" : undefined}>
+        <span className="nav-icon" aria-hidden="true">⌂</span><span className="nav-label">Home</span>
+      </Link>
+      <Link className={pathname === "/people" ? "active" : ""} href="/people" aria-current={pathname === "/people" ? "page" : undefined}>
+        <span className="nav-icon" aria-hidden="true">⌕</span><span className="nav-label">People</span>
+      </Link>
+      <Link className="nav-add" href="/profile?add=1">
+        <span className="nav-icon" aria-hidden="true">＋</span><span className="nav-label">Add</span>
+      </Link>
+      <Link className={pathname === "/notifications" ? "active" : ""} href="/notifications" aria-current={pathname === "/notifications" ? "page" : undefined}>
+        <span className="nav-icon" aria-hidden="true">♡</span><span className="nav-label">Inbox</span>{unread > 0 && <span className="nav-count">{unread > 99 ? "99+" : unread}</span>}
+      </Link>
+      <Link className={pathname === "/profile" || pathname === `/u/${username}` ? "active" : ""} href="/profile" aria-current={pathname === "/profile" ? "page" : undefined}>
+        <span className="nav-avatar" aria-hidden="true">{displayName.slice(0, 1).toUpperCase() || username.slice(0, 1).toUpperCase() || "S"}</span><span className="nav-label">Profile</span>
+      </Link>
+    </nav>
+  );
+}
+
+export function SocialHeader() {
+  return (
     <header className="social-header">
       <Link className="brand" href="/feed" aria-label="Saved home feed">
         <span className="brand-mark">s</span>
         <span>Saved</span>
       </Link>
-      <nav className="social-nav" aria-label="Social navigation">
-        <Link className={pathname === "/feed" ? "active" : ""} href="/feed" aria-current={pathname === "/feed" ? "page" : undefined}>
-          <span className="nav-icon" aria-hidden="true">⌂</span><span className="nav-label">Home</span>
-        </Link>
-        <Link className={pathname === "/people" ? "active" : ""} href="/people" aria-current={pathname === "/people" ? "page" : undefined}>
-          <span className="nav-icon" aria-hidden="true">⌕</span><span className="nav-label">People</span>
-        </Link>
-        <Link className="nav-add" href="/profile?add=1">
-          <span className="nav-icon" aria-hidden="true">＋</span><span className="nav-label">Add</span>
-        </Link>
-        <Link className={pathname === "/notifications" ? "active" : ""} href="/notifications" aria-current={pathname === "/notifications" ? "page" : undefined}>
-          <span className="nav-icon" aria-hidden="true">♡</span><span className="nav-label">Inbox</span>{unread > 0 && <span className="nav-count">{unread > 99 ? "99+" : unread}</span>}
-        </Link>
-        <Link className={pathname === "/profile" || pathname === `/u/${username}` ? "active" : ""} href="/profile" aria-current={pathname === "/profile" ? "page" : undefined}>
-          <span className="nav-avatar" aria-hidden="true">{displayName.slice(0, 1).toUpperCase() || username.slice(0, 1).toUpperCase() || "S"}</span><span className="nav-label">Profile</span>
-        </Link>
-      </nav>
+      <SocialNavigation />
     </header>
   );
 }

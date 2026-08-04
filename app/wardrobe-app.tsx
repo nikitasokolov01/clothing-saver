@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState, type CSSProperties } from "rea
 import Image, { type ImageLoaderProps } from "next/image";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
-import { SocialHeader } from "./_components/social-header";
+import { SocialHeader, SocialNavigation } from "./_components/social-header";
 import { convertCurrencyCents, displayCurrencies, normalizeCurrency } from "../lib/currency";
 import { productFromRow, productToRow, type ProductRow } from "../lib/product-storage";
 import { mergeProductRefresh, salePercentage } from "../lib/product-refresh";
@@ -912,7 +912,7 @@ export function WardrobeApp({ mode = "landing", focusImporter = false }: { mode?
   }
 
   return (
-    <main className={profileMode ? "social-shell wardrobe-profile-shell" : "app-shell"}>
+    <main className={profileMode ? "social-shell wardrobe-profile-shell" : user ? "app-shell with-social-nav" : "app-shell"}>
       {profileMode ? <SocialHeader /> : <header className="topbar">
         <a className="brand" href="#top" aria-label="Saved wardrobe home">
           <span className="brand-mark">s</span>
@@ -930,6 +930,7 @@ export function WardrobeApp({ mode = "landing", focusImporter = false }: { mode?
           ) : <div className="local-badge"><span /> Local preview</div>}
         </div>
       </header>}
+      {!profileMode && user && <SocialNavigation />}
 
       {profileMode ? (
         <section className="profile-hero wardrobe-profile-hero" id="top">

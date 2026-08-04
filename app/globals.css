@@ -28,6 +28,7 @@ img { display: block; width: 100%; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 .app-shell { width: min(1180px, calc(100% - 36px)); margin: 0 auto; min-height: 100vh; }
+.app-shell.with-social-nav { padding-bottom: 110px; }
 .topbar { height: 74px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; font-weight: 720; font-size: 17px; letter-spacing: -.02em; }
 .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 12px; background: var(--ink); color: #fff; font: italic 23px Georgia, serif; }
