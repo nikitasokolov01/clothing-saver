@@ -368,8 +368,11 @@ footer { min-height: 90px; display: flex; align-items: center; justify-content: 
   .import-pill input { padding: 0 8px; font-size: 13px; }
   .import-pill button { padding: 13px 16px; border-radius: 14px; }
   .under-import > span { display: none; }
-  .onboarding-dialog { min-height: calc(100vh - 24px); padding: 28px 20px 20px; }
+  .onboarding-dialog { min-height: 0; max-height: calc(100dvh - 24px); padding: 28px 20px max(24px, env(safe-area-inset-bottom)); }
   .onboarding-progress { margin-bottom: 28px; }
+  .onboarding-step { flex: 0 0 auto; }
+  .onboarding-actions { width: min(480px, 100%); justify-content: flex-end; margin-top: 26px; padding-top: 0; padding-bottom: 8px; }
+  .onboarding-actions .primary-button { min-width: 148px; }
   .sizing-choice:not(.compact) { grid-template-columns: 1fr; }
   .sizing-choice:not(.compact) button { min-height: 108px; }
   .under-import { justify-content: flex-end; }
