@@ -36,6 +36,14 @@ type AccountProfile = {
   onboardingCompleted: boolean;
 };
 
+type PrivacySettings = Pick<SocialProfile, "is_private" | "share_saved" | "share_closet">;
+
+const defaultPrivacySettings: PrivacySettings = {
+  is_private: true,
+  share_saved: true,
+  share_closet: true,
+};
+
 const samples: SavedProduct[] = [
   {
     id: "sample-knit",
@@ -243,6 +251,8 @@ export function WardrobeApp({ mode = "landing", focusImporter = false }: { mode?
   const [onboardingSizes, setOnboardingSizes] = useState<SizeProfile>(emptySizeProfile);
   const [onboardingPending, setOnboardingPending] = useState(false);
   const [currencyPending, setCurrencyPending] = useState(false);
+  const [privacyDraft, setPrivacyDraft] = useState<PrivacySettings>(defaultPrivacySettings);
+  const [privacyPending, setPrivacyPending] = useState(false);
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({ USD: 1 });
   const [exchangeRateTarget, setExchangeRateTarget] = useState("USD");
   const [user, setUser] = useState<User | null>(null);
@@ -259,7 +269,7 @@ export function WardrobeApp({ mode = "landing", focusImporter = false }: { mode?
       const loadAccount = async (account: User) => {
         setLoading(true);
         const [productsResult, profileResult, socialProfileResult] = await Promise.all([
-          supabase.from("products").select("*").order("created_at", { ascending: false }),
+          supabase.from("products").select("*").eq("user_id", account.id).order("created_at", { ascending: false }),
           supabase.from("profiles").select("full_name,username,sizing_preference,preferred_currency,onboarding_completed,size_profile").eq("user_id", account.id).maybeSingle(),
           supabase.from("social_profiles").select("*").eq("user_id", account.id).maybeSingle(),
         ]);
@@ -419,9 +429,20 @@ export function WardrobeApp({ mode = "landing", focusImporter = false }: { mode?
     }
   }
 
+  function openAccountPanel() {
+    if (socialProfile) {
+      setPrivacyDraft({
+        is_private: socialProfile.is_private,
+        share_saved: socialProfile.share_saved,
+        share_closet: socialProfile.share_closet,
+      });
+    }
+    setAuthOpen(true);
+  }
+
   function openSizeProfile() {
     if (supabase && !user) {
-      setAuthOpen(true);
+      openAccountPanel();
       setNotice("Log in to save a size profile to your account.");
       return;
     }
@@ -519,6 +540,23 @@ export function WardrobeApp({ mode = "landing", focusImporter = false }: { mode?
       return;
     }
     setNotice(`Saved prices will now display in ${currency}.`);
+  }
+
+  async function savePrivacySettings() {
+    if (!supabase || !user || !socialProfile) return;
+    setPrivacyPending(true);
+    setError("");
+    const { data, error: privacyError } = await supabase.from("social_profiles").update({
+      ...privacyDraft,
+      updated_at: new Date().toISOString(),
+    }).eq("user_id", user.id).select("*").single();
+    setPrivacyPending(false);
+    if (privacyError) {
+      setError(privacyError.message);
+      return;
+    }
+    setSocialProfile(data as SocialProfile);
+    setNotice(`Your profile is now ${privacyDraft.is_private ? "private" : "public"}.`);
   }
 
   async function finishOnboarding() {
@@ -627,7 +665,7 @@ export function WardrobeApp({ mode = "landing", focusImporter = false }: { mode?
     event.preventDefault();
     if (!url.trim()) return;
     if (supabase && !user) {
-      setAuthOpen(true);
+      openAccountPanel();
       setNotice("Log in so this piece can be saved to your account.");
       return;
     }
@@ -843,7 +881,7 @@ export function WardrobeApp({ mode = "landing", focusImporter = false }: { mode?
 
   function openManual() {
     if (supabase && !user) {
-      setAuthOpen(true);
+      openAccountPanel();
       setNotice("Log in so this piece can be saved to your account.");
       return;
     }
@@ -885,7 +923,7 @@ export function WardrobeApp({ mode = "landing", focusImporter = false }: { mode?
           {user && <a className="profile-button social-shortcut" href="/notifications">Inbox</a>}
           <button className="profile-button" type="button" onClick={openSizeProfile}>My sizes</button>
           {supabase ? (
-            <button className="account-button" type="button" onClick={() => setAuthOpen(true)}>
+            <button className="account-button" type="button" onClick={openAccountPanel}>
               <span className="account-avatar">{accountProfile?.fullName.slice(0, 1).toUpperCase() || user?.email?.slice(0, 1).toUpperCase() || "?"}</span>
               <span>{accountProfile?.fullName || accountProfile?.username || (user ? "My account" : "Log in")}</span>
             </button>
@@ -912,7 +950,10 @@ export function WardrobeApp({ mode = "landing", focusImporter = false }: { mode?
             <button className="primary-button" type="button" onClick={() => document.getElementById("product-url")?.focus()}>Add piece</button>
             <button className="secondary-button" type="button" onClick={openAccountProfile}>Edit profile</button>
             {accountProfile?.username && <Link className="secondary-button" href={`/u/${accountProfile.username}`}>View public profile</Link>}
-            <button className="profile-menu-button" type="button" onClick={() => setAuthOpen(true)} aria-label="Open account settings">•••</button>
+            <button className="privacy-button" type="button" onClick={openAccountPanel}>
+              <span className={socialProfile ? socialProfile.is_private ? "private" : "public" : "unknown"} aria-hidden="true" />
+              {socialProfile ? socialProfile.is_private ? "Private" : "Public" : "Privacy"}
+            </button>
           </div>
         </section>
       ) : <section className="intro" id="top">
@@ -973,7 +1014,7 @@ export function WardrobeApp({ mode = "landing", focusImporter = false }: { mode?
             <p className="kicker">Your private collection</p>
             <h3>Log in to see your pieces.</h3>
             <p>Every saved item and closet purchase stays connected to your account.</p>
-            <button type="button" onClick={() => setAuthOpen(true)}>Log in or create an account</button>
+            <button type="button" onClick={openAccountPanel}>Log in or create an account</button>
           </div>
         ) : loading ? (
           <div className="product-grid" aria-label="Loading saved products">{[0, 1, 2].map((number) => <div className="loading-card" key={number} />)}</div>
@@ -1039,7 +1080,7 @@ export function WardrobeApp({ mode = "landing", focusImporter = false }: { mode?
 
       {authOpen && (
         <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !authPending) setAuthOpen(false); }}>
-          <section className="dialog auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+          <section className={`dialog auth-dialog${user ? " account-dialog" : ""}`} role="dialog" aria-modal="true" aria-labelledby="auth-title">
             <button className="dialog-close" type="button" onClick={() => setAuthOpen(false)} disabled={authPending} aria-label="Close account dialog">×</button>
             {user ? (
               <div className="account-panel">
@@ -1058,6 +1099,38 @@ export function WardrobeApp({ mode = "landing", focusImporter = false }: { mode?
                   </select>
                   <small>Retailer prices stay saved in their original currency.</small>
                 </label>
+                {socialProfile && (
+                  <section className="account-privacy" aria-labelledby="privacy-title">
+                    <div className="account-setting-heading">
+                      <div>
+                        <p className="kicker">Privacy</p>
+                        <h3 id="privacy-title">Who can see your wardrobe?</h3>
+                      </div>
+                      <span className={`privacy-status ${privacyDraft.is_private ? "private" : "public"}`}>
+                        {privacyDraft.is_private ? "Private" : "Public"}
+                      </span>
+                    </div>
+                    <div className="privacy-choice" aria-label="Profile visibility">
+                      <button type="button" className={!privacyDraft.is_private ? "selected" : ""} aria-pressed={!privacyDraft.is_private} onClick={() => setPrivacyDraft((current) => ({ ...current, is_private: false }))}>
+                        <strong>Public</strong><span>Anyone can view the collections you share.</span>
+                      </button>
+                      <button type="button" className={privacyDraft.is_private ? "selected" : ""} aria-pressed={privacyDraft.is_private} onClick={() => setPrivacyDraft((current) => ({ ...current, is_private: true }))}>
+                        <strong>Private</strong><span>Only followers you approve can view them.</span>
+                      </button>
+                    </div>
+                    <div className="privacy-collections">
+                      <label className="social-toggle">
+                        <span><strong>Share saved pieces</strong><small>Include your wishlist on your profile.</small></span>
+                        <input type="checkbox" checked={privacyDraft.share_saved} onChange={(event) => setPrivacyDraft((current) => ({ ...current, share_saved: event.target.checked }))} />
+                      </label>
+                      <label className="social-toggle">
+                        <span><strong>Share closet</strong><small>Include pieces marked as bought.</small></span>
+                        <input type="checkbox" checked={privacyDraft.share_closet} onChange={(event) => setPrivacyDraft((current) => ({ ...current, share_closet: event.target.checked }))} />
+                      </label>
+                    </div>
+                    <button className="primary-button privacy-save" type="button" disabled={privacyPending} onClick={savePrivacySettings}>{privacyPending ? "Saving…" : "Save privacy"}</button>
+                  </section>
+                )}
                 <div className="account-actions">
                   {accountProfile?.username && <a className="secondary-button" href={`/u/${accountProfile.username}`}>View & share profile</a>}
                   <button className="secondary-button" type="button" onClick={openAccountProfile}>Edit profile</button>

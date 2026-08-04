@@ -182,6 +182,7 @@ footer { min-height: 90px; display: flex; align-items: center; justify-content: 
 
 .profile-dialog { width: min(720px, 100%); }
 .auth-dialog { width: min(460px, 100%); }
+.auth-dialog.account-dialog { width: min(620px, 100%); }
 .auth-form { display: grid; gap: 13px; }
 .auth-form > p:nth-of-type(2), .account-panel > p:last-of-type { margin: -3px 0 9px; color: var(--muted); font-size: 12px; }
 .auth-form label { display: grid; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 620; }
@@ -198,6 +199,21 @@ footer { min-height: 90px; display: flex; align-items: center; justify-content: 
 .account-currency select, .onboarding-currency select { width: 100%; border: 1px solid var(--line); border-radius: 13px; outline: 0; background: #fff; padding: 12px 13px; color: var(--ink); font-size: 12px; }
 .account-currency select:focus, .onboarding-currency select:focus { border-color: var(--ink); box-shadow: 0 0 0 3px rgba(37,37,34,.06); }
 .account-currency small, .onboarding-currency small { color: var(--muted); font-size: 9px; font-weight: 450; }
+.account-privacy { width: 100%; display: grid; gap: 14px; margin: 2px 0 22px; border-top: 1px solid var(--line); padding-top: 22px; text-align: left; }
+.account-setting-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.account-setting-heading .kicker { margin-bottom: 7px; }
+.account-setting-heading h3 { margin: 0; font-size: 22px; letter-spacing: -.04em; }
+.privacy-status { flex: 0 0 auto; border-radius: 999px; padding: 7px 10px; font-size: 9px; font-weight: 700; }
+.privacy-status.private { background: #e7e5df; color: var(--ink); }
+.privacy-status.public { background: var(--green-soft); color: var(--green); }
+.privacy-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.privacy-choice button { min-height: 92px; display: grid; align-content: end; gap: 5px; border: 1px solid var(--line); border-radius: 18px; background: #fff; padding: 14px; color: var(--ink); text-align: left; cursor: pointer; }
+.privacy-choice button.selected { border-color: var(--ink); background: var(--ink); color: #fff; }
+.privacy-choice strong { font-size: 13px; }
+.privacy-choice span { color: var(--muted); font-size: 9px; line-height: 1.45; }
+.privacy-choice button.selected span { color: rgba(255,255,255,.66); }
+.privacy-collections { display: grid; gap: 8px; }
+.privacy-save { justify-self: end; }
 .account-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .account-actions .secondary-button { text-decoration: none; }
 .profile-sizing-switch { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 10px; padding: 14px 16px; border-radius: 18px; background: #eeece5; }
@@ -246,9 +262,9 @@ footer { min-height: 90px; display: flex; align-items: center; justify-content: 
 .onboarding-actions { margin-top: auto; }
 .onboarding-actions .primary-button { min-width: 120px; }
 
-.social-shell { width: min(1080px, calc(100% - 36px)); min-height: 100vh; margin: 0 auto; padding-bottom: 90px; }
+.social-shell { width: min(1080px, calc(100% - 36px)); min-height: 100vh; margin: 0 auto; padding-bottom: 124px; }
 .social-header { min-height: 74px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-bottom: 1px solid var(--line); }
-.social-nav { display: flex; align-items: center; gap: 5px; }
+.social-nav { display: flex; align-items: center; gap: 5px; position: fixed; z-index: 35; bottom: 24px; left: 50%; border: 1px solid var(--line); border-radius: 24px; background: rgba(248,246,240,.94); padding: 7px; box-shadow: 0 16px 45px rgba(35,32,25,.18); backdrop-filter: blur(18px); transform: translateX(-50%); }
 .social-nav a { min-height: 38px; display: flex; align-items: center; gap: 7px; position: relative; border-radius: 999px; padding: 7px 11px; color: var(--muted); font-size: 11px; font-weight: 620; text-decoration: none; }
 .social-nav a:hover, .social-nav a.active { background: #fff; color: var(--ink); }
 .social-nav .nav-icon { width: 21px; height: 21px; display: grid; place-items: center; color: currentColor; font-size: 17px; line-height: 1; }
@@ -311,7 +327,9 @@ footer { min-height: 90px; display: flex; align-items: center; justify-content: 
 .profile-counts strong { color: var(--ink); }
 .profile-actions { display: flex; align-items: center; gap: 8px; }
 .profile-actions .secondary-button { color: var(--ink); text-decoration: none; }
-.profile-menu-button { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 15px; background: transparent; color: var(--ink); cursor: pointer; letter-spacing: 2px; }
+.privacy-button { min-height: 44px; display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 15px; background: transparent; padding: 0 14px; color: var(--ink); cursor: pointer; font-size: 10px; font-weight: 650; }
+.privacy-button span { width: 7px; height: 7px; border-radius: 50%; background: #77746b; }
+.privacy-button span.public { background: #4d8c64; box-shadow: 0 0 0 3px rgba(77,140,100,.12); }
 .wardrobe-profile-hero { padding-bottom: 30px; }
 .profile-counts-wide { flex-wrap: wrap; }
 .profile-wardrobe { padding-top: 36px; }
@@ -401,7 +419,7 @@ footer { min-height: 90px; display: flex; align-items: center; justify-content: 
   .social-shell { width: min(100% - 24px, 620px); }
   .social-header { min-height: 64px; }
   .social-header .brand > span:last-child { display: none; }
-  .social-nav { min-height: 68px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; position: fixed; z-index: 35; right: 12px; bottom: max(10px, env(safe-area-inset-bottom)); left: 12px; border: 1px solid var(--line); border-radius: 24px; background: rgba(248,246,240,.94); padding: 6px; box-shadow: 0 16px 45px rgba(35,32,25,.18); backdrop-filter: blur(18px); }
+  .social-nav { min-height: 68px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; right: 12px; bottom: max(10px, env(safe-area-inset-bottom)); left: 12px; padding: 6px; transform: none; }
   .social-nav a { min-width: 0; min-height: 54px; justify-content: center; flex-direction: column; gap: 2px; border-radius: 18px; padding: 5px 4px; font-size: 8px; }
   .social-nav .nav-icon { height: 24px; font-size: 20px; }
   .social-nav .nav-avatar { width: 24px; height: 24px; }
@@ -425,6 +443,7 @@ footer { min-height: 90px; display: flex; align-items: center; justify-content: 
   .person-card { grid-template-columns: auto minmax(0, 1fr); }
   .person-card .secondary-button { grid-column: 2; width: fit-content; }
   .social-settings { padding: 22px; border-radius: 24px; }
+  .privacy-choice { grid-template-columns: 1fr; }
   .notification-row { grid-template-columns: auto 1fr auto; }
   .notification-actions { grid-column: 2 / -1; }
   .unread-dot { grid-column: 3; grid-row: 1; }
