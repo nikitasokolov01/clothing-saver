@@ -3,19 +3,12 @@
 import Image, { type ImageLoaderProps } from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { priceForDisplay } from "../../lib/currency";
 import type { SocialProfile } from "../../lib/social";
 import type { SavedProduct } from "../../lib/types";
 
 const sourceImageLoader = ({ src }: ImageLoaderProps) => src;
-
-function money(cents: number | null, currency: string) {
-  if (cents === null) return "Price unavailable";
-  try {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
-  } catch {
-    return `${(cents / 100).toFixed(2)} ${currency}`;
-  }
-}
+const emptyExchangeRates: Record<string, number> = {};
 
 function relativeDate(value: string) {
   const days = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000));
@@ -25,8 +18,19 @@ function relativeDate(value: string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(value));
 }
 
-export function SocialProductCard({ product, owner }: { product: SavedProduct; owner?: SocialProfile }) {
+export function SocialProductCard({
+  product,
+  owner,
+  preferredCurrency = "",
+  exchangeRates = emptyExchangeRates,
+}: {
+  product: SavedProduct;
+  owner?: SocialProfile;
+  preferredCurrency?: string;
+  exchangeRates?: Record<string, number>;
+}) {
   const [imageFailed, setImageFailed] = useState(false);
+  const price = priceForDisplay(product.priceCents, product.currency, preferredCurrency, exchangeRates);
   return (
     <article className="social-product-card">
       <a className="social-product-link" href={product.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${product.title}`} />
@@ -44,7 +48,8 @@ export function SocialProductCard({ product, owner }: { product: SavedProduct; o
         )}
         <p className="kicker">{product.collection === "closet" ? "Added to closet" : "Saved"} {relativeDate(product.purchasedAt ?? product.createdAt)}</p>
         <h2>{product.title}</h2>
-        <p>{product.brand || product.retailer} · {money(product.priceCents, product.currency)}</p>
+        <p>{product.brand || product.retailer} · {price.primary}</p>
+        {price.secondary && <small className="social-original-price">{price.secondary}</small>}
         <div className="social-card-tags">
           <span>{product.category}</span>
           {product.selectedColor && <span>{product.selectedColor}</span>}

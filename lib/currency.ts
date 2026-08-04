@@ -21,3 +21,38 @@ export function normalizeCurrency(value: string, fallback = "USD") {
 export function convertCurrencyCents(cents: number, rate: number) {
   return Math.round(cents * rate);
 }
+
+export function formatCurrencyCents(cents: number | null, currency: string) {
+  if (cents === null) return "Price unavailable";
+  const normalized = normalizeCurrency(currency);
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: normalized,
+      maximumFractionDigits: 2,
+    }).format(cents / 100);
+  } catch {
+    return `${(cents / 100).toFixed(2)} ${normalized}`;
+  }
+}
+
+export function priceForDisplay(
+  cents: number | null,
+  originalCurrency: string,
+  preferredCurrency: string,
+  rates: Record<string, number>,
+) {
+  const original = normalizeCurrency(originalCurrency);
+  const preferred = normalizeCurrency(preferredCurrency, "");
+  const originalPrice = formatCurrencyCents(cents, original);
+  const rate = rates[original];
+
+  if (cents === null || !preferred || preferred === original || !rate) {
+    return { primary: originalPrice, secondary: "" };
+  }
+
+  return {
+    primary: formatCurrencyCents(convertCurrencyCents(cents, rate), preferred),
+    secondary: `${originalPrice} ${original} original`,
+  };
+}

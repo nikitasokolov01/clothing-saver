@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { SocialHeader } from "../../_components/social-header";
 import { SocialProductCard } from "../../_components/social-product-card";
+import { normalizeCurrency } from "../../../lib/currency";
 import { productFromRow, type ProductRow } from "../../../lib/product-storage";
 import { followActionLabel, type FollowRelationship, type SocialProfile } from "../../../lib/social";
 import { createClient, isSupabaseConfigured } from "../../../lib/supabase/client";
@@ -15,6 +16,8 @@ export function ProfileClient({ username }: { username: string }) {
   const [viewer, setViewer] = useState<User | null>(null);
   const [relationship, setRelationship] = useState<FollowRelationship | null>(null);
   const [products, setProducts] = useState<SavedProduct[]>([]);
+  const [preferredCurrency, setPreferredCurrency] = useState("");
+  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
   const [collection, setCollection] = useState<ProductCollection>("saved");
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
@@ -46,14 +49,41 @@ export function ProfileClient({ username }: { username: string }) {
     const followQuery = nextViewer && nextViewer.id !== nextProfile.user_id
       ? supabase.from("follows").select("*").eq("follower_id", nextViewer.id).eq("following_id", nextProfile.user_id).maybeSingle()
       : Promise.resolve({ data: null, error: null });
+    const currencyQuery = nextViewer
+      ? supabase.from("profiles").select("preferred_currency").eq("user_id", nextViewer.id).maybeSingle()
+      : Promise.resolve({ data: null, error: null });
     const productQuery = supabase.from("products").select("*")
       .eq("user_id", nextProfile.user_id).order("created_at", { ascending: false });
-    const [followResult, productResult] = await Promise.all([followQuery, productQuery]);
+    const [followResult, productResult, currencyResult] = await Promise.all([followQuery, productQuery, currencyQuery]);
     setRelationship(followResult.data as FollowRelationship | null);
     if (followResult.error) setError(followResult.error.message);
     if (productResult.error) setError(productResult.error.message);
-    else setProducts((productResult.data as ProductRow[]).map(productFromRow));
+    const nextProducts = productResult.error ? [] : (productResult.data as ProductRow[]).map(productFromRow);
+    if (!productResult.error) setProducts(nextProducts);
+
+    const currencyRow = currencyResult.data as { preferred_currency?: string | null } | null;
+    const nextPreferredCurrency = normalizeCurrency(currencyRow?.preferred_currency ?? "", "");
+    setPreferredCurrency(nextPreferredCurrency);
+    setExchangeRates({});
     setLoading(false);
+    const sourceCurrencies = [...new Set(nextProducts
+      .map((product) => normalizeCurrency(product.currency, ""))
+      .filter((currency) => currency && currency !== nextPreferredCurrency))];
+    if (nextPreferredCurrency && sourceCurrencies.length) {
+      try {
+        const response = await fetch("/api/exchange-rates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ from: sourceCurrencies, to: nextPreferredCurrency }),
+        });
+        if (response.ok) {
+          const result = await response.json() as { rates?: Record<string, number> };
+          if (result.rates) setExchangeRates(result.rates);
+        }
+      } catch {
+        // The original retailer price remains visible if conversion is unavailable.
+      }
+    }
   }, [username]);
 
   useEffect(() => {
@@ -182,7 +212,7 @@ export function ProfileClient({ username }: { username: string }) {
                 {(isOwner || profile.share_saved) && <button type="button" className={displayedCollection === "saved" ? "active" : ""} onClick={() => setCollection("saved")}>Saved <span>{products.filter((item) => item.collection === "saved").length}</span></button>}
                 {(isOwner || profile.share_closet) && <button type="button" className={displayedCollection === "closet" ? "active" : ""} onClick={() => setCollection("closet")}>Closet <span>{products.filter((item) => item.collection === "closet").length}</span></button>}
               </div>
-              {visibleProducts.length ? <div className="social-product-grid">{visibleProducts.map((product) => <SocialProductCard product={product} key={product.id} />)}</div> : (
+              {visibleProducts.length ? <div className="social-product-grid">{visibleProducts.map((product) => <SocialProductCard product={product} preferredCurrency={preferredCurrency} exchangeRates={exchangeRates} key={product.id} />)}</div> : (
                 <div className="social-empty"><span>Nothing here</span><h2>No {displayedCollection} pieces yet.</h2></div>
               )}
             </section>
