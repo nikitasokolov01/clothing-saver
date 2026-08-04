@@ -435,11 +435,20 @@ footer { min-height: 90px; display: flex; align-items: center; justify-content: 
   .social-product-copy h2 { font-size: 20px; }
   .social-owner { margin-bottom: 14px; }
   .social-card-tags span:nth-child(2) { display: none; }
-  .profile-hero { grid-template-columns: 1fr; padding-top: 40px; }
-  .profile-avatar { width: 76px; height: 76px; border-radius: 24px; font-size: 40px; }
-  .profile-actions { grid-column: auto; flex-wrap: wrap; }
-  .wardrobe-profile-hero { gap: 15px; padding-bottom: 26px; }
-  .profile-counts-wide { gap: 10px 16px; }
+  .profile-hero { grid-template-columns: 86px minmax(0, 1fr); column-gap: 20px; row-gap: 12px; align-items: start; padding-top: 32px; }
+  .profile-avatar { width: 86px; height: 86px; grid-column: 1; grid-row: 1; border-radius: 27px; font-size: 44px; }
+  .profile-identity { display: contents; }
+  .profile-identity .kicker { grid-column: 1 / -1; grid-row: 2; margin: 5px 0 0; }
+  .profile-identity h1 { grid-column: 1 / -1; grid-row: 3; }
+  .profile-handle { grid-column: 1 / -1; grid-row: 4; margin-top: -2px; }
+  .profile-bio { grid-column: 1 / -1; grid-row: 5; margin-top: 2px; }
+  .profile-hero .profile-counts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-column: 2; grid-row: 1; align-self: center; gap: 13px 18px; margin: 0; }
+  .profile-hero .profile-counts span { min-width: 0; display: grid; gap: 2px; line-height: 1.15; }
+  .profile-hero .profile-counts strong { font-size: 18px; }
+  .profile-actions { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-column: 1 / -1; grid-row: 6; gap: 8px; margin-top: 3px; }
+  .profile-actions > * { width: 100%; min-height: 46px; display: flex; align-items: center; justify-content: center; border-radius: 15px; padding: 11px 10px; text-align: center; }
+  .profile-actions > :only-child { grid-column: 1 / -1; }
+  .wardrobe-profile-hero { padding-bottom: 26px; }
   .profile-wardrobe { padding-top: 32px; }
   .person-card { grid-template-columns: auto minmax(0, 1fr); }
   .person-card .secondary-button { grid-column: 2; width: fit-content; }
