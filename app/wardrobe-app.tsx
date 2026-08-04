@@ -912,7 +912,7 @@ export function WardrobeApp({ mode = "landing", focusImporter = false }: { mode?
   }
 
   return (
-    <main className={profileMode ? "social-shell wardrobe-profile-shell" : user ? "app-shell with-social-nav" : "app-shell"}>
+    <main className={profileMode ? "social-shell wardrobe-profile-shell" : user ? "app-shell with-app-dock" : "app-shell"}>
       {profileMode ? <SocialHeader /> : <header className="topbar">
         <a className="brand" href="#top" aria-label="Saved wardrobe home">
           <span className="brand-mark">s</span>

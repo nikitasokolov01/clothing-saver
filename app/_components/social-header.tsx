@@ -32,21 +32,21 @@ export function SocialNavigation() {
   }, []);
 
   return (
-    <nav className="social-nav" aria-label="Social navigation">
+    <nav className="app-dock" aria-label="Primary navigation">
       <Link className={pathname === "/feed" ? "active" : ""} href="/feed" aria-current={pathname === "/feed" ? "page" : undefined}>
-        <span className="nav-icon" aria-hidden="true">⌂</span><span className="nav-label">Home</span>
+        <span className="dock-icon" aria-hidden="true">⌂</span><span className="dock-label">Home</span>
       </Link>
       <Link className={pathname === "/people" ? "active" : ""} href="/people" aria-current={pathname === "/people" ? "page" : undefined}>
-        <span className="nav-icon" aria-hidden="true">⌕</span><span className="nav-label">People</span>
+        <span className="dock-icon" aria-hidden="true">⌕</span><span className="dock-label">People</span>
       </Link>
-      <Link className="nav-add" href="/profile?add=1">
-        <span className="nav-icon" aria-hidden="true">＋</span><span className="nav-label">Add</span>
+      <Link className="dock-create" href="/profile?add=1">
+        <span className="dock-icon" aria-hidden="true">＋</span><span className="dock-label">Add</span>
       </Link>
       <Link className={pathname === "/notifications" ? "active" : ""} href="/notifications" aria-current={pathname === "/notifications" ? "page" : undefined}>
-        <span className="nav-icon" aria-hidden="true">♡</span><span className="nav-label">Inbox</span>{unread > 0 && <span className="nav-count">{unread > 99 ? "99+" : unread}</span>}
+        <span className="dock-icon" aria-hidden="true">♡</span><span className="dock-label">Inbox</span>{unread > 0 && <span className="dock-count">{unread > 99 ? "99+" : unread}</span>}
       </Link>
       <Link className={pathname === "/profile" || pathname === `/u/${username}` ? "active" : ""} href="/profile" aria-current={pathname === "/profile" ? "page" : undefined}>
-        <span className="nav-avatar" aria-hidden="true">{displayName.slice(0, 1).toUpperCase() || username.slice(0, 1).toUpperCase() || "S"}</span><span className="nav-label">Profile</span>
+        <span className="dock-avatar" aria-hidden="true">{displayName.slice(0, 1).toUpperCase() || username.slice(0, 1).toUpperCase() || "S"}</span><span className="dock-label">Profile</span>
       </Link>
     </nav>
   );
@@ -54,7 +54,7 @@ export function SocialNavigation() {
 
 export function SocialHeader() {
   return (
-    <header className="social-header">
+    <header className="app-page-header">
       <Link className="brand" href="/feed" aria-label="Saved home feed">
         <span className="brand-mark">s</span>
         <span>Saved</span>
